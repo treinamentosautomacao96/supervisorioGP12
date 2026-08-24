@@ -11,7 +11,7 @@
 //  chão em zero. Assim as duas cenas podem, um dia, dividir componentes.
 //
 //  O QUE JÁ ESTÁ AQUI
-//    esteira de 6000 x 600, o único dado confirmado até agora
+//    esteira de 6000 x 700, topo da correia a 900 mm do chão
 //
 //  O QUE FALTA (esperando informação)
 //    modelo do robô Epson (SCARA ou 6 eixos muda a geometria inteira)
@@ -26,14 +26,13 @@ import { memo, useRef } from "react";
 import * as THREE from "three";
 
 // ---------------------------------------------------------------- medidas --
-// O que veio confirmado: 6 m de comprimento, 0,60 m de largura.
-// A altura ainda NÃO foi informada — 850 mm é altura de trabalho comum em
-// linha de embalagem, e está aqui como palpite EXPLÍCITO para ser corrigido,
-// não como dado. Todo o resto se ajusta a partir daqui.
+// TODAS CONFIRMADAS pelo autor da célula: 6 m x 0,70 m, altura de 90 cm.
+// A altura é a cota que governa o resto — alcance do robô, se ele vai em
+// pedestal, onde entra o aplicador. Por isso vem antes de tudo.
 export const ESTEIRA = {
   comp: 6000,
-  larg: 600,
-  altura: 850,        // <- CONFIRMAR
+  larg: 700,
+  altura: 900,
   correia: 14,        // espessura da correia
   perfil: 90,         // altura do perfil lateral
   guia: 60,           // altura das guias laterais do produto
@@ -143,7 +142,7 @@ function CameraQueGira({ ativo }: { ativo: boolean }) {
     t.current += dt * 0.12;
     const r = 7200;
     s.camera.position.set(Math.cos(t.current) * r, 3000, Math.sin(t.current) * r);
-    s.camera.lookAt(0, 700, 0);
+    s.camera.lookAt(0, 900, 0);
   });
   return null;
 }
@@ -192,7 +191,7 @@ function CenaEtiquetadora({ girar = false }: { girar?: boolean }) {
       <CameraQueGira ativo={girar} />
 
       <OrbitControls
-        target={[0, 700, 0]}
+        target={[0, 900, 0]}
         maxPolarAngle={Math.PI / 2 - 0.04}
         minDistance={1200}
         maxDistance={20000}

@@ -38,7 +38,7 @@ export function Bancada() {
         <span className="tag">EM MODELAGEM · mm</span>
         <span className="spacer" />
         <span className="pill sim">
-          ESTEIRA {ESTEIRA.comp / 1000} × {ESTEIRA.larg / 1000} m · ALTURA {ESTEIRA.altura} mm A CONFIRMAR
+          ESTEIRA {ESTEIRA.comp / 1000} × {ESTEIRA.larg / 1000} m · ALTURA {ESTEIRA.altura / 10} cm
         </span>
       </header>
       <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
