@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Cell } from "./scene/Cell";
 import { Panel } from "./ui/Panel";
 import { useRobot } from "./lib/useRobot";
+import { useVoz } from "./lib/useVoz";
 
 /** Data e hora do turno, batendo de segundo em segundo.
  *
@@ -26,6 +27,7 @@ function Relogio() {
 export function App() {
   const robot = useRobot();
   const prod = robot.state?.producao ?? null;
+  const voz = useVoz(robot.state);
 
   return (
     <div className="wrap">
@@ -74,7 +76,7 @@ export function App() {
           <span className="dica">ARRASTE PARA ORBITAR · RODA PARA APROXIMAR</span>
         </section>
 
-        <Panel robot={robot} />
+        <Panel robot={robot} voz={voz} />
       </div>
 
       {/* Sem rodapé explicativo: era nota de desenvolvimento, não informação

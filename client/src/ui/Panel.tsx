@@ -6,6 +6,7 @@
 //  com o que faz alguém agir. O resto são controles, não indicadores.
 // ============================================================================
 import type { RobotLink } from "../lib/useRobot";
+import type { Voz } from "../lib/useVoz";
 
 /** Um sinal de status: rótulo + estado.
  *
@@ -27,7 +28,7 @@ function Sinal({ rotulo, valor, alerta }: {
 }
 
 
-export function Panel({ robot }: { robot: RobotLink }) {
+export function Panel({ robot, voz }: { robot: RobotLink; voz: Voz }) {
   const st = robot.state;
   const moving = Boolean(st && st.running && st.speed > 2);
   const trocando = st?.phase === -1;
@@ -179,6 +180,21 @@ export function Panel({ robot }: { robot: RobotLink }) {
               valor={st.status.barreiras ? "LIVRES" : "INTERROMPIDA"}
               alerta={st.status.barreiras ? undefined : "ruim"}
             />
+          </div>
+        </section>
+      )}
+
+      {/* AVISOS FALADOS. Padrao DESLIGADO, e o clique daqui e o gesto que o
+          navegador exige para deixar tocar audio -- sem ele, a primeira fala
+          seria descartada em silencio. O botao nao aparece onde o navegador
+          nao souber falar. */}
+      {voz.suportado && (
+        <section className="card">
+          <div className="card-title">AVISOS SONOROS</div>
+          <div className="controls">
+            <button className={voz.ligado ? "ativo" : ""} onClick={voz.alternar}>
+              {voz.ligado ? "SOM LIGADO" : "SOM DESLIGADO"}
+            </button>
           </div>
         </section>
       )}
