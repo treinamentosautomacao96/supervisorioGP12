@@ -1,0 +1,230 @@
+// ============================================================================
+//  FB "08 - INDICADORES"   —   produção por turno
+//
+//  Conta PEÇAS OK e PEÇAS NÃO OK, separadas por turno, e publica nas holdings
+//  livres do mesmo DB de Modbus que o FC "07 - SUPERVISORIO" já usa.
+//
+//  POR QUE UM FB, E NÃO UM FC
+//  Contador precisa LEMBRAR. FC não tem memória própria: a cada chamada os
+//  seus dados temporários nascem de novo. Este bloco tem instância, e os
+//  contadores são RETENTIVOS — sobrevivem a queda de energia e a parada da
+//  CPU. Se fossem voláteis, um religamento zeraria o turno.
+//
+//  POR QUE NO CLP, E NÃO NO SUPERVISÓRIO
+//  Porque o supervisório dorme, reinicia e é reimplantado; e o gateway já
+//  caiu por timeout de Modbus uma vez. Contador de produção que perde peça
+//  quando um processo reinicia não é indicador, é estimativa. Aqui ele só
+//  para se a linha parar.
+//
+//  --------------------------------------------------------- O QUE É PEÇA ----
+//  Uma peça é contada UMA vez, quando deixa os roletes da balança:
+//
+//    HOLDINGS[0] PEÇA EM POSIÇÃO sobe  -> começa a valer o veredito
+//    HOLDINGS[1] PESO  0 aguardando · 1 OK · 2 NÃO OK
+//    HOLDINGS[0] cai                   -> a peça saiu: CONTA o que ficou latchado
+//
+//  Contar na BORDA DE SAÍDA, e não quando o peso muda, é de propósito: o
+//  veredito pode oscilar enquanto a caixa assenta nos roletes, e cada
+//  oscilação viraria uma peça. Uma caixa que entra e sai é exatamente uma
+//  peça, sempre.
+//
+//  Peça que sai sem veredito nenhum (peso ficou em 0) NÃO é contada em lugar
+//  nenhum: não se inventa aprovação nem reprovação. Ela aparece em
+//  SEM VEREDITO, para o caso não ficar invisível.
+//
+//  ------------------------------------------------------------- TURNOS ------
+//    Turno 1 ....... 07:30 às 17:30
+//    Turno 2 ....... 17:30 às 02:50   (atravessa a meia-noite)
+//    Fora de turno . 02:50 às 07:30   (indicador segue em 0)
+//
+//  Na virada, o turno que fecha é COPIADO para os campos "turno anterior" e
+//  os contadores do turno zeram. Assim o operador que entra vê a produção
+//  dele desde o primeiro minuto, e quem sai não perde o número.
+//
+//  Os TOTAIS acumulados nunca zeram — são DInt em duas words cada, porque
+//  Word estoura em 65.535 e a ~2.500 peças/dia isso seria menos de um mês.
+//
+//  ---------------------------------------------------------------- MAPA -----
+//   HR35  Int    TURNO ATIVO  (0 = fora de turno, 1, 2)
+//   HR36  Int    minutos decorridos do turno
+//   HR37  Int    peças OK no turno
+//   HR38  Int    peças NÃO OK no turno
+//   HR39  Int    peças por hora no turno (só OK)
+//   HR40  Int    peças SEM VEREDITO no turno
+//   HR41  Int    peças OK no turno ANTERIOR
+//   HR42  Int    peças NÃO OK no turno ANTERIOR
+//   HR43  Word   TOTAL OK — parte alta      \  DInt de 32 bits,
+//   HR44  Word   TOTAL OK — parte baixa     /  acumulado desde sempre
+//   HR45  Word   TOTAL NÃO OK — parte alta  \
+//   HR46  Word   TOTAL NÃO OK — parte baixa /
+//   HR47..99     LIVRES
+//
+//  ------------------------------------------------------- COMO INSTALAR -----
+//   1. Program blocks > Add new external file > este .scl
+//   2. Clique direito no arquivo > Generate blocks from source
+//   3. Chamar no Main [OB1] com instância própria, ANTES do "07 - SUPERVISORIO"
+//      (a ordem não é crítica: escrevem em holdings diferentes)
+//   4. No bloco de instância, CONFIRA que a coluna Retain está marcada nas
+//      variáveis estáticas. Sem retentividade, uma queda de energia zera o
+//      turno e você só descobre no dia seguinte.
+//
+//  ATENÇÃO: este bloco só ESCREVE em HOLDINGS[35..46]. Não toca em [0..3],
+//  que são da balança, nem em [10..34], que são do FC 07.
+//
+//  ------------------------------------------------------------- RELÓGIO -----
+//  O turno vem do relógio da CPU. Se a hora do CLP estiver errada, os turnos
+//  saem errados junto — vale conferir em Online & diagnostics > Set time of
+//  day antes de confiar no número.
+//
+//  Se o TIA reclamar da chamada de RD_LOC_T, é diferença de versão. As duas
+//  formas aceitas são:
+//      #erroHora := RD_LOC_T(#agora);
+//      #erroHora := RD_LOC_T(OUT_ => #agora);
+//  Troque uma pela outra e compile de novo. O resto do bloco não muda.
+// ============================================================================
+
+FUNCTION_BLOCK "08 - INDICADORES"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+VAR RETAIN
+   turnoAtivo   : Int;    // 0 fora de turno, 1, 2
+   okTurno      : Int;    // peças aprovadas no turno corrente
+   nokTurno     : Int;    // peças reprovadas no turno corrente
+   semVerTurno  : Int;    // peças que saíram sem veredito
+   okAnterior   : Int;    // fechamento do turno passado
+   nokAnterior  : Int;
+   okTotal      : DInt;   // acumulado desde sempre
+   nokTotal     : DInt;
+   minutosIni   : Int;    // minuto do dia em que o turno começou
+   pecaAnt      : Bool;   // borda de PEÇA EM POSIÇÃO
+   veredito     : Int;    // peso latchado enquanto a peça está na balança
+END_VAR
+
+VAR_TEMP
+   agora        : DTL;
+   erroHora     : Int;
+   minutoDia    : Int;    // 0..1439
+   turnoAgora   : Int;
+   pecaPresente : Bool;
+   pesoAgora    : Int;
+   decorridos   : Int;    // minutos desde o início do turno
+   porHora      : Int;
+END_VAR
+
+BEGIN
+
+   // =========================================================================
+   //  QUE HORAS SÃO, E EM QUE TURNO ISSO CAI
+   // =========================================================================
+   #erroHora := RD_LOC_T(#agora);
+   #minutoDia := #agora.HOUR * 60 + #agora.MINUTE;
+
+   // 07:30 = 450 · 17:30 = 1050 · 02:50 = 170
+   IF #minutoDia >= 450 AND #minutoDia < 1050 THEN
+      #turnoAgora := 1;
+   ELSIF #minutoDia >= 1050 OR #minutoDia < 170 THEN
+      #turnoAgora := 2;                      // atravessa a meia-noite
+   ELSE
+      #turnoAgora := 0;                      // 02:50 às 07:30
+   END_IF;
+
+   // Relógio inválido: mantém o turno anterior em vez de fechar por engano.
+   // Perder a leitura da hora não é motivo para zerar a produção de ninguém.
+   IF #erroHora <> 0 THEN
+      #turnoAgora := #turnoAtivo;
+   END_IF;
+
+   // =========================================================================
+   //  VIRADA DE TURNO
+   //
+   //  Só fecha quando o turno REALMENTE muda. O que estava aberto vai para os
+   //  campos "anterior" e os contadores zeram. Os totais seguem intactos.
+   // =========================================================================
+   IF #turnoAgora <> #turnoAtivo THEN
+      IF #turnoAtivo <> 0 THEN
+         #okAnterior  := #okTurno;
+         #nokAnterior := #nokTurno;
+      END_IF;
+      #turnoAtivo  := #turnoAgora;
+      #okTurno     := 0;
+      #nokTurno    := 0;
+      #semVerTurno := 0;
+      #minutosIni  := #minutoDia;
+   END_IF;
+
+   // =========================================================================
+   //  A PEÇA
+   //
+   //  Enquanto a caixa está nos roletes, guarda-se o melhor veredito visto.
+   //  Ao sair, conta uma vez. O veredito 2 (NÃO OK) tem precedência: se a
+   //  balança reprovou em algum instante, a peça é reprovada — reprovação que
+   //  o operador viu na IHM não pode virar aprovação no indicador.
+   // =========================================================================
+   #pecaPresente := "MODBUS HOLDINGS".HOLDINGS[0] <> 0;
+   #pesoAgora    := WORD_TO_INT("MODBUS HOLDINGS".HOLDINGS[1]);
+
+   IF #pecaPresente THEN
+      IF #pesoAgora = 2 THEN
+         #veredito := 2;                     // reprovada manda
+      ELSIF #pesoAgora = 1 AND #veredito <> 2 THEN
+         #veredito := 1;
+      END_IF;
+   END_IF;
+
+   // Borda de SAÍDA: a caixa deixou os roletes. Aqui, e só aqui, conta.
+   IF #pecaAnt AND NOT #pecaPresente THEN
+      CASE #veredito OF
+         1:
+            #okTurno := #okTurno + 1;
+            #okTotal := #okTotal + 1;
+         2:
+            #nokTurno := #nokTurno + 1;
+            #nokTotal := #nokTotal + 1;
+         ELSE
+            // Saiu sem a balança se pronunciar. Não vira OK nem NÃO OK —
+            // fica visível em HR40 para não sumir da conta.
+            #semVerTurno := #semVerTurno + 1;
+      END_CASE;
+      #veredito := 0;                        // pronto para a próxima
+   END_IF;
+
+   #pecaAnt := #pecaPresente;
+
+   // =========================================================================
+   //  RITMO: peças por hora no turno corrente
+   //
+   //  Só depois de 5 minutos. Antes disso o divisor é pequeno demais e o
+   //  número dispara — três peças no primeiro minuto viram 180 peças/hora, o
+   //  que não informa nada e ainda assusta quem olha.
+   // =========================================================================
+   #decorridos := #minutoDia - #minutosIni;
+   IF #decorridos < 0 THEN
+      #decorridos := #decorridos + 1440;     // o turno 2 cruza a meia-noite
+   END_IF;
+
+   IF #decorridos >= 5 THEN
+      #porHora := DINT_TO_INT(INT_TO_DINT(#okTurno) * 60 / INT_TO_DINT(#decorridos));
+   ELSE
+      #porHora := 0;
+   END_IF;
+
+   // =========================================================================
+   //  PUBLICAÇÃO — HR35..HR46
+   // =========================================================================
+   "MODBUS HOLDINGS".HOLDINGS[35] := INT_TO_WORD(#turnoAtivo);
+   "MODBUS HOLDINGS".HOLDINGS[36] := INT_TO_WORD(#decorridos);
+   "MODBUS HOLDINGS".HOLDINGS[37] := INT_TO_WORD(#okTurno);
+   "MODBUS HOLDINGS".HOLDINGS[38] := INT_TO_WORD(#nokTurno);
+   "MODBUS HOLDINGS".HOLDINGS[39] := INT_TO_WORD(#porHora);
+   "MODBUS HOLDINGS".HOLDINGS[40] := INT_TO_WORD(#semVerTurno);
+   "MODBUS HOLDINGS".HOLDINGS[41] := INT_TO_WORD(#okAnterior);
+   "MODBUS HOLDINGS".HOLDINGS[42] := INT_TO_WORD(#nokAnterior);
+
+   // DInt em duas words: parte alta primeiro, como o gateway remonta.
+   "MODBUS HOLDINGS".HOLDINGS[43] := DWORD_TO_WORD(SHR(IN := DINT_TO_DWORD(#okTotal), N := 16));
+   "MODBUS HOLDINGS".HOLDINGS[44] := DWORD_TO_WORD(DINT_TO_DWORD(#okTotal));
+   "MODBUS HOLDINGS".HOLDINGS[45] := DWORD_TO_WORD(SHR(IN := DINT_TO_DWORD(#nokTotal), N := 16));
+   "MODBUS HOLDINGS".HOLDINGS[46] := DWORD_TO_WORD(DINT_TO_DWORD(#nokTotal));
+
+END_FUNCTION_BLOCK
