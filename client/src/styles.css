@@ -33,13 +33,13 @@ header .tag{
 }
 header .spacer{flex:1}
 header .relogio{
-  font-family:var(--font-data);font-size:11px;color:var(--muted);
-  letter-spacing:.06em;display:inline-flex;gap:8px;align-items:baseline;
+  font-family:var(--font-data);font-size:16px;color:var(--muted);
+  letter-spacing:.04em;display:inline-flex;gap:10px;align-items:baseline;
 }
-header .relogio b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+header .relogio b{color:var(--ink);font-weight:600;font-size:19px;font-variant-numeric:tabular-nums}
 .pill{
-  font-family:var(--font-data);font-size:11px;letter-spacing:.08em;
-  border-radius:3px;padding:2px 8px;border:1px solid var(--line);color:var(--muted);
+  font-family:var(--font-data);font-size:14px;font-weight:600;letter-spacing:.08em;
+  border-radius:4px;padding:5px 12px;border:1px solid var(--line);color:var(--muted);
 }
 .pill.sim{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
 .pill.off{color:#E5484D;border-color:color-mix(in srgb,#E5484D 45%,transparent)}
@@ -55,21 +55,21 @@ header .relogio b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-
   display:flex;flex-direction:column;gap:9px;
 }
 .wip-linha{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.wip-linha span{font-size:11px;letter-spacing:.08em;color:var(--muted)}
-.wip-linha b{font-family:var(--font-data);font-size:15px;color:var(--ink)}
+.wip-linha span{font-size:12px;letter-spacing:.08em;color:var(--muted)}
+.wip-linha b{font-family:var(--font-data);font-size:18px;color:var(--ink)}
 .wip-selo{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-family:var(--font-data);font-size:10px;font-weight:600;letter-spacing:.16em;
+  font-family:var(--font-data);font-size:12px;font-weight:600;letter-spacing:.16em;
   color:var(--warn);text-align:center;pointer-events:none;
 }
 
-.grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:10px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px}
 @media (max-width:860px){.grid{grid-template-columns:1fr}}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:6px}
 .card-title{
   padding:8px 12px;border-bottom:1px solid var(--line);
-  font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--muted);
+  font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--muted);
 }
 
 .stage{padding:6px;position:relative}
@@ -116,11 +116,11 @@ aside{display:flex;flex-direction:column;gap:14px}
 
 /* Sinais de status: duas colunas, rótulo pequeno e valor forte. A cor só
    aparece quando o sinal exige atenção — tudo colorido não destaca nada. */
-.sinais{padding:8px 12px 12px;display:grid;grid-template-columns:1fr 1fr;gap:7px 12px}
+.sinais{padding:11px 14px 14px;display:grid;grid-template-columns:1fr 1fr;gap:11px 14px}
 .sinal{display:flex;flex-direction:column;gap:1px;
   border-left:2px solid var(--line);padding-left:7px}
-.sinal-rot{font-size:9px;letter-spacing:.13em;color:var(--muted)}
-.sinal-val{font-family:var(--font-data);font-size:12px;font-weight:500}
+.sinal-rot{font-size:10.5px;letter-spacing:.12em;color:var(--muted)}
+.sinal-val{font-family:var(--font-data);font-size:15px;font-weight:500}
 .sinal.atencao{border-left-color:var(--warn)}
 .sinal.atencao .sinal-val{color:var(--warn)}
 .sinal.ruim{border-left-color:#E5484D}

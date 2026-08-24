@@ -1,11 +1,11 @@
 // ============================================================================
-//  Painel lateral: estado, juntas, TCP, fases da paletização e controles.
-//  Texto vem do estado React (25 Hz já é mais do que o olho pede).
+//  Painel lateral: o que o operador precisa decidir olhando de longe.
+//
+//  Só três blocos de leitura — PRODUÇÃO, ROBÔ e SEGURANÇA. Garra, ar e
+//  paletização saíram: eram detalhe de manutenção competindo por atenção
+//  com o que faz alguém agir. O resto são controles, não indicadores.
 // ============================================================================
 import type { RobotLink } from "../lib/useRobot";
-
-const fmt = (n: number, d: number) =>
-  n.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /** Um sinal de status: rótulo + estado.
  *
@@ -26,17 +26,6 @@ function Sinal({ rotulo, valor, alerta }: {
   );
 }
 
-function Ro({ label, value, unit }: { label: string; value: string; unit: string }) {
-  return (
-    <div className="ro">
-      <label>{label}</label>
-      <output>
-        {value}
-        <small>{unit}</small>
-      </output>
-    </div>
-  );
-}
 
 export function Panel({ robot }: { robot: RobotLink }) {
   const st = robot.state;
@@ -147,71 +136,6 @@ export function Panel({ robot }: { robot: RobotLink }) {
           </div>
         </section>
       )}
-
-      {/* ============ GARRA E AR: a causa nº 1 de parada ============ */}
-      {st && (
-        <section className="card">
-          <div className="card-title">GARRA E AR</div>
-          <div className="sinais">
-            <Sinal
-              rotulo="VÁCUO"
-              // Ligado SEM OK = caixa caiu ou vazamento. É o diagnóstico que
-              // um bit só de "vácuo" nunca daria.
-              valor={
-                !st.status.vacuoLigado ? "DESLIGADO"
-                  : st.status.vacuoOk ? "OK" : "SEM VÁCUO"
-              }
-              alerta={st.status.vacuoLigado && !st.status.vacuoOk ? "ruim" : undefined}
-            />
-            <Sinal
-              rotulo="PRESSÃO DE AR"
-              valor={`${fmt(st.status.pressaoBar, 2)} bar`}
-              alerta={
-                st.status.pressaoBar < 4.5 ? "ruim"
-                  : st.status.pressaoBar < 5.5 ? "atencao" : undefined
-              }
-            />
-            <Sinal
-              rotulo="BALANÇA"
-              valor={st.status.almBalanca === 0 ? "OK" : `ALARME ${st.status.almBalanca}`}
-              alerta={st.status.almBalanca === 0 ? undefined : "ruim"}
-            />
-            <Sinal
-              rotulo="SELADORA"
-              valor={st.status.seladoraDesabilitada ? "DESABILITADA" : "ATIVA"}
-              alerta={st.status.seladoraDesabilitada ? "atencao" : undefined}
-            />
-          </div>
-        </section>
-      )}
-
-      <section className="card">
-        <div className="card-title">PALETIZAÇÃO</div>
-        <div className="readouts">
-          <Ro label="CAIXA" value={st ? `${st.boxIndex + 1}/${st.boxTotal}` : "—"} unit="" />
-          <Ro label="PALETE A" value={st ? `${st.countA}/${st.boxTotal / 2}` : "—"} unit="" />
-          <Ro label="PALETE B" value={st ? `${st.countB}/${st.boxTotal / 2}` : "—"} unit="" />
-          <div className="ro full">
-            <label style={st?.feed?.status === "REPROVADA" ? { color: "#E5484D" } : undefined}>
-              BALANÇA TOLEDO{st?.feed ? ` · ${st.feed.status}` : ""}
-            </label>
-            <output>
-              {st && st.peso > 0 ? fmt(st.peso, 2) : "—"}
-              <small>kg</small>
-            </output>
-          </div>
-        </div>
-        <ol className="steps">
-          {robot.phases.map((name, i) => (
-            <li
-              key={i}
-              className={st && !trocando && i === st.phase ? "now" : ""}
-            >
-              {name}
-            </li>
-          ))}
-        </ol>
-      </section>
 
       <section className="card">
         <div className="card-title">
