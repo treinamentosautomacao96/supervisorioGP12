@@ -28,9 +28,14 @@
 //  oscilação viraria uma peça. Uma caixa que entra e sai é exatamente uma
 //  peça, sempre.
 //
-//  Peça que sai sem veredito nenhum (peso ficou em 0) NÃO é contada em lugar
-//  nenhum: não se inventa aprovação nem reprovação. Ela aparece em
-//  SEM VEREDITO, para o caso não ficar invisível.
+//  SÓ O OK EXPLÍCITO APROVA. Peça que sai sem a balança se pronunciar (peso
+//  ficou em 0) conta como NÃO OK — a regra é da célula: peça em posição sem o
+//  OK da balança é reprovada, e o robô a descarta.
+//
+//  Essas ficam contadas TAMBÉM em HR40, que é um subconjunto de HR38 e não
+//  uma terceira categoria: destas reprovadas, quantas foram por ausência de
+//  veredito em vez de reprovação. Separa problema de produto de problema de
+//  integração — se HR40 subir sozinho, o defeito está na balança.
 //
 //  ------------------------------------------------------------- TURNOS ------
 //    Turno 1 ....... 07:30 às 17:30
@@ -50,7 +55,7 @@
 //   HR37  Int    peças OK no turno
 //   HR38  Int    peças NÃO OK no turno
 //   HR39  Int    peças por hora no turno (só OK)
-//   HR40  Int    peças SEM VEREDITO no turno
+//   HR40  Int    das NÃO OK, quantas por AUSÊNCIA de veredito (⊂ HR38)
 //   HR41  Int    peças OK no turno ANTERIOR
 //   HR42  Int    peças NÃO OK no turno ANTERIOR
 //   HR43  Word   TOTAL OK — parte alta      \  DInt de 32 bits,
@@ -91,7 +96,7 @@ VAR RETAIN
    turnoAtivo   : Int;    // 0 fora de turno, 1, 2
    okTurno      : Int;    // peças aprovadas no turno corrente
    nokTurno     : Int;    // peças reprovadas no turno corrente
-   semVerTurno  : Int;    // peças que saíram sem veredito
+   semVerTurno  : Int;    // das NÃO OK, quantas por ausência de veredito
    okAnterior   : Int;    // fechamento do turno passado
    nokAnterior  : Int;
    okTotal      : DInt;   // acumulado desde sempre
@@ -174,18 +179,28 @@ BEGIN
 
    // Borda de SAÍDA: a caixa deixou os roletes. Aqui, e só aqui, conta.
    IF #pecaAnt AND NOT #pecaPresente THEN
-      CASE #veredito OF
-         1:
-            #okTurno := #okTurno + 1;
-            #okTotal := #okTotal + 1;
-         2:
-            #nokTurno := #nokTurno + 1;
-            #nokTotal := #nokTotal + 1;
-         ELSE
-            // Saiu sem a balança se pronunciar. Não vira OK nem NÃO OK —
-            // fica visível em HR40 para não sumir da conta.
+      IF #veredito = 1 THEN
+         #okTurno := #okTurno + 1;
+         #okTotal := #okTotal + 1;
+      ELSE
+         // TUDO O QUE NÃO É OK É NÃO OK — inclusive sair sem veredito.
+         //
+         // A regra é da célula: peça em posição sem o OK da balança é
+         // reprovada, e o robô a descarta. Então `veredito = 0` (a balança
+         // não se pronunciou) conta como reprovada igual a `veredito = 2`.
+         // Só o OK explícito aprova.
+         #nokTurno := #nokTurno + 1;
+         #nokTotal := #nokTotal + 1;
+
+         // HR40 é SUBCONJUNTO de HR38, não uma terceira categoria: destas
+         // reprovadas, quantas foram por AUSÊNCIA de veredito em vez de
+         // reprovação da balança. Serve para separar problema de produto de
+         // problema de integração — se este número subir sozinho, o defeito
+         // está na balança, não nas caixas.
+         IF #veredito = 0 THEN
             #semVerTurno := #semVerTurno + 1;
-      END_CASE;
+         END_IF;
+      END_IF;
       #veredito := 0;                        // pronto para a próxima
    END_IF;
 
