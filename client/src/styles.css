@@ -14,6 +14,10 @@
   --font-data:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
 *{box-sizing:border-box;margin:0}
+/* O div raiz do React precisa de altura: sem isto o `height:100%` do
+   conteudo resolve contra um elemento sem altura e a cena colapsa. Na tela
+   principal o defeito ficava escondido porque o painel enchia o espaco. */
+#root{height:100%}
 /* ALTURA FIXA, sem rolagem de pagina. A cena e o painel se ajustam ao que
    sobra; nada some para fora da janela. Com altura calculada a mao
    (`calc(100vh - 132px)`), qualquer mudanca de fonte no cabecalho

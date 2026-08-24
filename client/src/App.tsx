@@ -3,6 +3,7 @@ import { Cell } from "./scene/Cell";
 import { Panel } from "./ui/Panel";
 import { useRobot } from "./lib/useRobot";
 import { useVoz } from "./lib/useVoz";
+import { Etiquetadora, ESTEIRA } from "./cenas/Etiquetadora";
 
 /** Data e hora do turno, batendo de segundo em segundo.
  *
@@ -21,6 +22,32 @@ function Relogio() {
       {agora.toLocaleDateString("pt-BR")}
       <b>{agora.toLocaleTimeString("pt-BR")}</b>
     </span>
+  );
+}
+
+/** Cena de ETIQUETAGEM, em construção. Rota separada de propósito: o
+ *  supervisório do GP12 está em produção e não pode balançar enquanto esta
+ *  aqui muda de forma. Acessa-se por ?cena=etiquetadora */
+export function Bancada() {
+  const params = new URLSearchParams(location.search);
+  const girar = params.get("girar") === "1";
+  return (
+    <div className="wrap">
+      <header>
+        <h1>Célula de Etiquetagem · Epson</h1>
+        <span className="tag">EM MODELAGEM · mm</span>
+        <span className="spacer" />
+        <span className="pill sim">
+          ESTEIRA {ESTEIRA.comp / 1000} × {ESTEIRA.larg / 1000} m · ALTURA {ESTEIRA.altura} mm A CONFIRMAR
+        </span>
+      </header>
+      <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
+        <section className="card stage">
+          <div className="canvas-box"><Etiquetadora girar={girar} /></div>
+          <span className="dica">ARRASTE PARA ORBITAR · RODA PARA APROXIMAR</span>
+        </section>
+      </div>
+    </div>
   );
 }
 
