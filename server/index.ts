@@ -171,16 +171,85 @@ try {
 const fonteDe = new WeakMap<WebSocket, "sim" | "real">();
 const fonteDo = (c: WebSocket) => fonteDe.get(c) ?? "real";
 
+// ---------------------------------------------------------------- BANDA ----
+//  Medido antes de mexer: 2,97 KB por quadro com os paletes cheios, a 25 Hz,
+//  71,4 KB/s por navegador — 176 GB/mês com UMA aba aberta. Três quartos
+//  disso eram `placed`, retransmitido 25 vezes por segundo embora mude umas
+//  três vezes por minuto.
+//
+//  Duas economias, nesta ordem de tamanho:
+//    1. `placed` e `status` só viajam quando mudam;
+//    2. os números vão arredondados — meio grau de junta e um milímetro de
+//       TCP não mudam um pixel na tela, e float cru custa 17 dígitos.
+// ----------------------------------------------------------------------------
+
+/** Quem ainda não recebeu um quadro COMPLETO nesta fonte. Sem ele, um cliente
+ *  novo receberia um quadro magro e não teria pilha nenhuma para manter. */
+const precisaCompleto = new WeakSet<WebSocket>();
+
+const r1 = (v: number) => Math.round(v * 10) / 10;
+const r0 = (v: number) => Math.round(v);
+
+/** O estado com os números na precisão que a tela realmente usa. */
+function enxuto(state: RobotState, de: "sim" | "real") {
+  return {
+    ...state,
+    fonte: de,
+    realOk: real.ok,
+    // As caixas em coordenada inteira: milímetro é a menor unidade da cena.
+    placed: state.placed.map((b) => ({ x: r0(b.x), y: r0(b.y), z: r0(b.z), rot: b.rot })),
+    j: [r1(state.j[0]), r1(state.j[1]), r1(state.j[2])] as [number, number, number],
+    tcp: { x: r0(state.tcp.x), y: r0(state.tcp.y), z: r0(state.tcp.z) },
+    speed: r0(state.speed),
+    saidaA: r1(state.saidaA),
+    saidaB: r1(state.saidaB),
+  };
+}
+
+/** Serialização de cada campo no último quadro enviado, por fonte. */
+const ultimo: Record<"sim" | "real", Map<string, string>> = {
+  sim: new Map(),
+  real: new Map(),
+};
+
 function broadcast(state: RobotState, de: "sim" | "real") {
-  let data: string | null = null;
+  const completo = enxuto(state, de);
+  const anterior = ultimo[de];
+
+  // Diferença campo a campo. Regra única, sem lista de exceções: as juntas e
+  // o TCP entram sempre porque sempre mudam; a pilha, o status e os
+  // contadores entram quando têm o que dizer.
+  const mudou: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(completo)) {
+    const s = JSON.stringify(v);
+    if (anterior.get(k) !== s) {
+      mudou[k] = v;
+      anterior.set(k, s);
+    }
+  }
+
+  let parcial: string | null = null;
+  let inteiro: string | null = null;
+
   for (const c of wss.clients) {
     if (c.readyState !== WebSocket.OPEN || fonteDo(c) !== de) continue;
-    // Serializa uma vez só, e apenas se houver alguém para receber.
-    if (data === null) {
-      const msg: StateMsg = { type: "state", ...state, fonte: de, realOk: real.ok };
-      data = JSON.stringify(msg);
+
+    if (precisaCompleto.has(c)) {
+      // Serializado no máximo uma vez por quadro, e só se houver quem precise.
+      inteiro ??= JSON.stringify({ type: "state", ...completo } as StateMsg);
+      c.send(inteiro);
+      precisaCompleto.delete(c);
+      continue;
     }
-    c.send(data);
+
+    // Nada mudou neste quadro: não se manda quadro nenhum. O enlace já tem
+    // o seu próprio ping/pong para provar que está vivo — repetir
+    // `{"type":"state"}` 25 vezes por segundo só para dizer "sem novidade"
+    // seria pagar banda para não informar nada.
+    if (Object.keys(mudou).length === 0) continue;
+
+    parcial ??= JSON.stringify({ type: "state", ...mudou } as StateMsg);
+    c.send(parcial);
   }
 }
 
@@ -205,6 +274,8 @@ wss.on("connection", (ws) => {
     },
   };
   ws.send(JSON.stringify(hello));
+  // Primeiro estado deste cliente: completo, com pilha e status.
+  precisaCompleto.add(ws);
 
   ws.on("message", (raw) => {
     try {
@@ -212,7 +283,11 @@ wss.on("connection", (ws) => {
       if (!msg || typeof msg.cmd !== "string") return;
       if (msg.cmd === "fonte") {
         // Só esta conexão troca de fonte. As outras seguem onde estavam.
-        if (msg.value === "sim" || msg.value === "real") fonteDe.set(ws, msg.value);
+        if (msg.value === "sim" || msg.value === "real") {
+          fonteDe.set(ws, msg.value);
+          // Fonte nova, pilha nova: o próximo quadro tem de vir completo.
+          precisaCompleto.add(ws);
+        }
         return;
       }
       // Comandos de simulação valem SÓ para o simulador — a célula real não

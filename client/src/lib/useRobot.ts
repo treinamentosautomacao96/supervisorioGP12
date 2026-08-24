@@ -50,8 +50,18 @@ export function useRobot(): RobotLink {
           setPhases(msg.phases);
           setLayout(msg.layout);
         } else if (msg.type === "state") {
-          liveRef.current = msg;
-          setState(msg);
+          // `placed` e `status` só vêm quando mudam — ausentes, valem os
+          // últimos recebidos. É daqui que sai a economia de banda: eram
+          // 76,5 % do tráfego, retransmitidos 25 vezes por segundo embora
+          // mudem umas três vezes por minuto. Ver StateMsg em shared/types.
+          //
+          // O primeiro quadro depois de conectar (e depois de trocar de
+          // fonte) vem completo pelo servidor, então nunca se monta um
+          // estado sem pilha.
+          const anterior = liveRef.current;
+          const completo = { ...(anterior ?? {}), ...msg } as RobotState;
+          liveRef.current = completo;
+          setState(completo);
         }
       };
       ws.onclose = () => {

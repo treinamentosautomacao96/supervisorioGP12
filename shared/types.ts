@@ -101,9 +101,22 @@ export interface HelloMsg {
   };
 }
 
-export interface StateMsg extends RobotState {
-  type: "state";
-}
+/** Estado no fio — SÓ O QUE MUDOU.
+ *
+ *  MEDIDO antes de existir esta regra: com os dois paletes cheios, o estado
+ *  completo dá 2,97 KB e, a 25 Hz, 71,4 KB/s POR NAVEGADOR — 176 GB por mês
+ *  com uma única aba aberta. E 76,5 % disso era `placed`, a lista das 64
+ *  caixas já depositadas, retransmitida 1.500 vezes por minuto porque um
+ *  ângulo de junta mudou.
+ *
+ *  Agora cada campo viaja apenas quando o seu valor muda. Campo AUSENTE
+ *  significa "igual ao que você já tem": o cliente mantém o último recebido.
+ *  Os que mudam a cada quadro — juntas, TCP, velocidade — aparecem sempre,
+ *  porque sempre mudam; os outros aparecem quando têm o que dizer.
+ *
+ *  Quem acaba de conectar, ou de trocar de fonte, recebe um quadro COMPLETO
+ *  antes de qualquer quadro parcial; sem isso não haveria o que manter. */
+export type StateMsg = { type: "state" } & Partial<RobotState>;
 
 export type ServerMsg = HelloMsg | StateMsg;
 
