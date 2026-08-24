@@ -81,6 +81,31 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:19px;font-variant-n
 .prod-caixa.nok b{color:#FF6369}
 .prod .sinais{padding:0}
 
+/* ---- PLACAR sobre a cena ---------------------------------------------------
+   Canto superior esquerdo, grande e translucido. Numero que se le de longe e
+   de canto de olho, sem tirar espaco da simulacao.
+
+   `pointer-events:none` NAO e detalhe: sem ele o placar engoliria o arraste
+   do mouse e a orbita da camera morreria naquele canto da tela. */
+.placar{
+  position:absolute;left:22px;top:20px;display:flex;gap:26px;
+  pointer-events:none;user-select:none;
+}
+.placar-item{display:flex;flex-direction:column;line-height:1}
+.placar-item b{
+  font-family:var(--font-data);font-size:52px;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--ink);opacity:.45;
+  text-shadow:0 2px 14px rgba(0,0,0,.55);
+}
+.placar-item span{
+  font-size:11px;letter-spacing:.18em;color:var(--ink);opacity:.35;
+  margin-top:4px;
+}
+.placar-item.ok b{color:var(--good);opacity:.5}
+/* NAO OK so ganha cor quando existe: zero em vermelho treina o olho a
+   ignorar a cor, e ai o vermelho que importa passa batido. */
+.placar-item.nok b{color:#FF6369;opacity:.6}
+
 .grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px}
 @media (max-width:860px){.grid{grid-template-columns:1fr}}
 

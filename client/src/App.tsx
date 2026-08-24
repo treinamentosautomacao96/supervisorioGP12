@@ -25,6 +25,7 @@ function Relogio() {
 
 export function App() {
   const robot = useRobot();
+  const prod = robot.state?.producao ?? null;
 
   return (
     <div className="wrap">
@@ -53,6 +54,23 @@ export function App() {
               placed={robot.state?.placed ?? []}
             />
           </div>
+          {/* PLACAR sobre a cena, canto superior esquerdo.
+              `pointer-events: none` no CSS é obrigatório: sem isso ele
+              engoliria o arraste do mouse e a órbita da câmera morreria
+              naquele canto. Opacidade baixa para não competir com o robô —
+              é informação de canto de olho, não o assunto principal. */}
+          {prod && (
+            <div className="placar">
+              <div className="placar-item ok">
+                <b>{prod.ok}</b>
+                <span>OK</span>
+              </div>
+              <div className={"placar-item" + (prod.nok > 0 ? " nok" : "")}>
+                <b>{prod.nok}</b>
+                <span>NÃO OK</span>
+              </div>
+            </div>
+          )}
           <span className="dica">ARRASTE PARA ORBITAR · RODA PARA APROXIMAR</span>
         </section>
 

@@ -72,6 +72,10 @@ const TROCA_S = 6.0;
 // robô a descarta aqui — regra confirmada pelo autor da célula.
 export const DESCARTE = { s: 40, r: 1120, top: 650 } as const;
 
+// Fuso da planta. Os turnos são da fábrica, e o servidor pode estar em
+// qualquer lugar — na nuvem ele roda em UTC.
+const FUSO_FABRICA = "America/Sao_Paulo";
+
 const PER_LAYER = 16;
 export const PER_PALLET = PER_LAYER * PALLET.layers;              // 32
 export const TOTAL = PER_PALLET * 2;                              // 64
@@ -582,8 +586,22 @@ export class Gp12Simulator extends EventEmitter {
    *  reprove — mostrar reprovação fictícia ensinaria o operador a desconfiar
    *  do indicador quando ele for real. */
   private indicadores() {
+    // A HORA É A DA FÁBRICA, não a do servidor.
+    //
+    // Em produção este processo roda num container em UTC: `getHours()` daria
+    // 16h com a linha às 13h, e o turno sairia errado — às 15h no Brasil o
+    // UTC marca 18h, e o simulador anunciaria turno 2 com a fábrica no
+    // turno 1. Fixar o fuso aqui resolve sem depender de TZ no ambiente nem
+    // de tzdata na imagem.
+    //
+    // Só o SIMULADOR precisa disto: na fonte real o turno vem do CLP, que
+    // usa o relógio da CPU, já na hora local.
     const t = new Date();
-    const min = t.getHours() * 60 + t.getMinutes();
+    const hhmm = new Intl.DateTimeFormat("pt-BR", {
+      timeZone: FUSO_FABRICA, hour: "2-digit", minute: "2-digit", hour12: false,
+    }).format(t);
+    const [hora, minuto] = hhmm.split(":").map(Number);
+    const min = hora * 60 + minuto;
     const turno = min >= 450 && min < 1050 ? 1 : (min >= 1050 || min < 170) ? 2 : 0;
     const ini = turno === 1 ? 450 : turno === 2 ? 1050 : min;
     let decorridos = min - ini;
