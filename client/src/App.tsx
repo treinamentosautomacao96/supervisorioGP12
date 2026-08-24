@@ -63,11 +63,11 @@ export function App() {
             <div className="placar">
               <div className="placar-item ok">
                 <b>{prod.ok}</b>
-                <span>OK</span>
+                <span>PEÇAS OK</span>
               </div>
               <div className={"placar-item" + (prod.nok > 0 ? " nok" : "")}>
                 <b>{prod.nok}</b>
-                <span>NÃO OK</span>
+                <span>PEÇAS NOK</span>
               </div>
             </div>
           )}

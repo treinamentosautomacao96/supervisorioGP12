@@ -14,15 +14,20 @@
   --font-data:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
 *{box-sizing:border-box;margin:0}
+/* ALTURA FIXA, sem rolagem de pagina. A cena e o painel se ajustam ao que
+   sobra; nada some para fora da janela. Com altura calculada a mao
+   (`calc(100vh - 132px)`), qualquer mudanca de fonte no cabecalho
+   desequilibrava a conta e a tela passava a cortar embaixo. */
 body{
   background:var(--ground);color:var(--ink);
   font-family:var(--font-ui);font-size:14px;line-height:1.45;
-  min-height:100vh;padding:12px 14px;
+  height:100vh;overflow:hidden;padding:12px 14px;
 }
 /* Sem teto de largura: em monitor de chao de fabrica, limitar a 1120px
    deixava faixas mortas dos dois lados e espremia a cena. O painel tem
    largura fixa, entao tudo o que a tela ganha vai para o 3D. */
-.wrap{width:100%;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.wrap{width:100%;height:100%;margin:0 auto;display:flex;flex-direction:column;
+  gap:10px;min-height:0}
 
 header{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header h1{font-size:17px;font-weight:600;letter-spacing:.02em}
@@ -82,31 +87,34 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:30px;font-variant-n
 .prod .sinais{padding:0}
 
 /* ---- PLACAR sobre a cena ---------------------------------------------------
-   Canto superior esquerdo, grande e translucido. Numero que se le de longe e
-   de canto de olho, sem tirar espaco da simulacao.
+   Canto superior, afastado da borda: encostado em 22px o numero grande
+   passava por baixo da moldura do card e parecia cortado.
 
    `pointer-events:none` NAO e detalhe: sem ele o placar engoliria o arraste
    do mouse e a orbita da camera morreria naquele canto da tela. */
 .placar{
-  position:absolute;left:22px;top:20px;display:flex;gap:26px;
+  position:absolute;left:56px;top:34px;display:flex;gap:44px;
   pointer-events:none;user-select:none;
+  /* sobra para a sombra e para os digitos altos nao rasparem em nada */
+  padding:6px 10px;
 }
-.placar-item{display:flex;flex-direction:column;line-height:1}
+.placar-item{display:flex;flex-direction:column;line-height:.95}
 .placar-item b{
-  font-family:var(--font-data);font-size:52px;font-weight:600;
-  font-variant-numeric:tabular-nums;color:var(--ink);opacity:.45;
-  text-shadow:0 2px 14px rgba(0,0,0,.55);
+  font-family:var(--font-data);font-size:76px;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--ink);opacity:.62;
+  text-shadow:0 3px 22px rgba(0,0,0,.75);
 }
 .placar-item span{
-  font-size:11px;letter-spacing:.18em;color:var(--ink);opacity:.35;
-  margin-top:4px;
+  font-size:16px;font-weight:600;letter-spacing:.2em;color:var(--ink);
+  opacity:.5;margin-top:7px;text-shadow:0 2px 10px rgba(0,0,0,.7);
 }
-.placar-item.ok b{color:var(--good);opacity:.5}
+.placar-item.ok b{color:var(--good);opacity:.68}
 /* NAO OK so ganha cor quando existe: zero em vermelho treina o olho a
    ignorar a cor, e ai o vermelho que importa passa batido. */
-.placar-item.nok b{color:#FF6369;opacity:.6}
+.placar-item.nok b{color:#FF6369;opacity:.78}
 
-.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px;
+  flex:1;min-height:0}
 @media (max-width:860px){.grid{grid-template-columns:1fr}}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:6px}
@@ -115,9 +123,12 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:30px;font-variant-n
   font-size:13px;font-weight:600;letter-spacing:.13em;color:var(--muted);
 }
 
-.stage{padding:6px;position:relative}
+.stage{padding:6px;position:relative;display:flex;flex-direction:column;
+  min-height:0}
 /* Altura pela JANELA, nao fixa em 560px: a cena cresce com o monitor. */
-.stage .canvas-box{height:calc(100vh - 132px);min-height:420px;border-radius:4px;overflow:hidden;background:var(--panel-2)}
+/* A cena ocupa o que sobrar, seja qual for o tamanho do cabecalho. */
+.stage .canvas-box{flex:1;min-height:0;border-radius:4px;overflow:hidden;
+  background:var(--panel-2)}
 .stage canvas{touch-action:none}
 .dica{
   position:absolute;left:22px;bottom:20px;
@@ -125,7 +136,9 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:30px;font-variant-n
   color:var(--muted);pointer-events:none;
 }
 
-aside{display:flex;flex-direction:column;gap:14px}
+/* O painel rola por dentro se nao couber, em vez de empurrar a pagina. */
+aside{display:flex;flex-direction:column;gap:14px;min-height:0;
+  overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
 
 .state{display:flex;align-items:center;gap:12px;padding:15px 14px}
 .state .lamp{
