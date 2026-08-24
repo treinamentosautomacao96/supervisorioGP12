@@ -59,9 +59,14 @@ node testa-modbus.cjs
 
 | degrau | falhou? |
 |---|---|
-| 1/3 conecta na porta 503 | CLP em STOP, IP errado, ou a 2ª instância `MB_SERVER` ainda não existe no CLP |
-| 2/3 lê as holdings | firewall no caminho |
-| 3/3 HR26 mudou | CLP em STOP com Modbus vivo, ou a FC 07 não é chamada no `Main [OB1]` |
+| 1/4 conecta na porta 503 | CLP em STOP, IP errado, ou a 2ª instância `MB_SERVER` ainda não existe no CLP |
+| 2/4 lê HR0..HR46 | firewall no caminho |
+| 3/4 HR26 mudou | CLP em STOP com Modbus vivo, ou a FC 07 não é chamada no `Main [OB1]` |
+| 4/4 indicadores de produção | HR35..46 em zero: o FB "08 - INDICADORES" ainda não foi carregado, não é chamado no `Main`, ou a instância está sem Retain |
+
+O quarto degrau **não reprova**: HR35..46 em zero é o esperado antes de o FB 08
+existir. Ele só imprime peças OK, NÃO OK, peças/hora e turno quando o bloco
+está publicando — e é assim que você confirma, no próprio CLP, que ele entrou.
 
 O terceiro degrau é o que importa: **Modbus responde igual com o CPU em STOP**.
 Só um contador andando prova que o programa roda. Passando os três, ele imprime

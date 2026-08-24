@@ -504,7 +504,7 @@ export class MqttSource extends EventEmitter {
         fonte: "real", realOk: false, tcp: fkTcp([0, -5, -50]), speed: 0,
         placed: [], boxIndex: 0, boxTotal: TOTAL, descartadas: 0, carryRot: 0,
         paleteA: false, paleteB: false, saidaA: 1, saidaB: 1,
-        emergencia: false, paletesProduzidos: 0,
+        emergencia: false, paletesProduzidos: 0, producao: null,
         status: {
           remoto: false, servoOn: false, emCiclo: false, emHome: false,
           falha: false, almRobo: 0, automatico: false, portas: false,
@@ -561,6 +561,15 @@ export class MqttSource extends EventEmitter {
       saidaA: this.pal.A.saida,
       saidaB: this.pal.B.saida,
       emergencia: p.celula.emergencia,
+      // Indicadores do FB 08. Enquanto o bloco não estiver no CLP, as
+      // holdings valem zero — e `null` diz isso, em vez de fingir produção
+      // parada. O critério é ter turno aberto OU total acumulado: os totais
+      // nunca zeram depois do primeiro turno, então servem de prova de vida
+      // do bloco.
+      producao: p.producao && (p.producao.turno > 0
+        || p.producao.okTotal > 0 || p.producao.nokTotal > 0)
+        ? p.producao
+        : null,
       paletesProduzidos: p.paletesProduzidos ?? 0,
       status: {
         remoto: p.robo.remoto,

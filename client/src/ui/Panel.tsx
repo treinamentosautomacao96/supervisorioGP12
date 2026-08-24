@@ -31,6 +31,7 @@ export function Panel({ robot }: { robot: RobotLink }) {
   const st = robot.state;
   const moving = Boolean(st && st.running && st.speed > 2);
   const trocando = st?.phase === -1;
+  const prod = st?.producao ?? null;
 
   return (
     <aside>
@@ -54,22 +55,67 @@ export function Panel({ robot }: { robot: RobotLink }) {
             ninguém mediu não vai para a tela de quem opera. */}
       </section>
 
-      {/* ============ INDICADORES DE PRODUÇÃO — ainda não existem ============
-          Desfocado e marcado de propósito. O lugar fica reservado na tela e
-          fica EXPLÍCITO que não há número aqui — melhor do que um card com
-          zeros, que o operador leria como produção parada. Os valores atrás
-          do borrão são fictícios, e é por isso que não podem ser lidos. */}
+      {/* ============ INDICADORES DE PRODUÇÃO ============
+          Com dado do CLP, mostra. Sem dado, fica desfocado com o selo —
+          porque zero e "não sei" são coisas diferentes, e um card com zeros
+          o operador lê como produção parada. Quem decide é o servidor, que
+          manda `producao: null` enquanto o FB 08 não estiver no CLP. */}
       <section className="card">
-        <div className="card-title">INDICADORES DE PRODUÇÃO</div>
-        <div className="wip">
-          <div className="wip-conteudo" aria-hidden="true">
-            <div className="wip-linha"><span>PEÇAS / HORA</span><b>—</b></div>
-            <div className="wip-linha"><span>PALETES NO TURNO</span><b>—</b></div>
-            <div className="wip-linha"><span>DISPONIBILIDADE</span><b>—</b></div>
-            <div className="wip-linha"><span>TEMPO DE CICLO</span><b>—</b></div>
-          </div>
-          <span className="wip-selo">EM DESENVOLVIMENTO</span>
+        <div className="card-title">
+          INDICADORES DE PRODUÇÃO
+          {prod ? ` · TURNO ${prod.turno === 0 ? "—" : prod.turno}` : ""}
         </div>
+        {prod ? (
+          <div className="prod">
+            <div className="prod-par">
+              <div className="prod-caixa ok">
+                <span>PEÇAS OK</span>
+                <b>{prod.ok}</b>
+              </div>
+              <div className={"prod-caixa" + (prod.nok > 0 ? " nok" : "")}>
+                <span>NÃO OK</span>
+                <b>{prod.nok}</b>
+              </div>
+            </div>
+            <div className="sinais">
+              <Sinal rotulo="PEÇAS / HORA" valor={String(prod.porHora)} />
+              <Sinal
+                rotulo="TEMPO DE TURNO"
+                valor={`${Math.floor(prod.minutos / 60)}h${String(prod.minutos % 60).padStart(2, "0")}`}
+              />
+              {/* Refugo em vez de "% OK": o número que importa é o que dói. */}
+              <Sinal
+                rotulo="REFUGO"
+                valor={
+                  prod.ok + prod.nok === 0
+                    ? "—"
+                    : `${((prod.nok * 100) / (prod.ok + prod.nok)).toFixed(1)} %`
+                }
+                alerta={prod.nok * 20 > prod.ok + prod.nok ? "atencao" : undefined}
+              />
+              {/* SUBCONJUNTO do NÃO OK, não uma terceira categoria: destas
+                  reprovadas, quantas por ausência de veredito. Sobe sozinho =
+                  problema na balança, não nas caixas. */}
+              <Sinal
+                rotulo="SEM PESAGEM"
+                valor={String(prod.semVeredito)}
+                alerta={prod.semVeredito > 0 ? "atencao" : undefined}
+              />
+              <Sinal rotulo="TURNO ANTERIOR" valor={`${prod.okAnterior} OK`} />
+              <Sinal rotulo="ACUMULADO" valor={`${prod.okTotal} OK`} />
+            </div>
+          </div>
+        ) : (
+          <div className="wip">
+            <div className="wip-conteudo" aria-hidden="true">
+              <div className="wip-linha"><span>PEÇAS OK</span><b>—</b></div>
+              <div className="wip-linha"><span>NÃO OK</span><b>—</b></div>
+              <div className="wip-linha"><span>PEÇAS / HORA</span><b>—</b></div>
+              <div className="wip-linha"><span>REFUGO</span><b>—</b></div>
+            </div>
+            <span className="wip-selo">AGUARDANDO O CLP</span>
+          </div>
+        )}
       </section>
 
       {/* ============ ROBÔ: está em condição de produzir? ============ */}

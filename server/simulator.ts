@@ -300,6 +300,7 @@ export class Gp12Simulator extends EventEmitter {
   private jv = 0;
   private dwell = 0;
   private trocando = false;      // paletes cheios, aguardando troca
+  private okSim = 0;             // depósitos desde que o simulador subiu
   private carrying = false;
   // ---- entrada: esteira + balança ----
   private feedX: number | null = null;   // posição da caixa que chega
@@ -483,6 +484,7 @@ export class Gp12Simulator extends EventEmitter {
               // A orientação vem do PADRÃO (catavento), não do braço: o eixo
               // T (não modelado nas juntas) esquadra a caixa no ângulo do slot.
               this.placed.push({ ...sl.center, rot: sl.rot });
+              this.okSim++;
             }
             this.dwell = 0;
             this.prog = 0;
@@ -544,6 +546,10 @@ export class Gp12Simulator extends EventEmitter {
         almBalanca: 0, seladoraDesabilitada: false,
       },      emergencia: false,      // o simulador nao gera emergencia
       paletesProduzidos: 0,
+      // O simulador não tem balança de verdade, então não inventa reprovação:
+      // conta como OK o que ele mesmo depositou e deixa NÃO OK em zero. O
+      // turno vem do relógio, igual ao do CLP, para a tela ficar coerente.
+      producao: this.indicadores(),
       paleteA: !this.trocando,
       paleteB: !this.trocando,
       // Na troca os dois paletes saem de cena na empilhadeira, para trás —
@@ -566,6 +572,33 @@ export class Gp12Simulator extends EventEmitter {
       carryRot: slot(sideOf(idx), idx % PER_PALLET).rot,
       countA,
       countB,
+    };
+  }
+
+  /** Indicadores para a tela em modo SIMULADOR.
+   *
+   *  Números do próprio simulador, não invenção: `ok` é quanto ele depositou
+   *  desde que subiu. `nok` fica em zero porque aqui não há balança que
+   *  reprove — mostrar reprovação fictícia ensinaria o operador a desconfiar
+   *  do indicador quando ele for real. */
+  private indicadores() {
+    const t = new Date();
+    const min = t.getHours() * 60 + t.getMinutes();
+    const turno = min >= 450 && min < 1050 ? 1 : (min >= 1050 || min < 170) ? 2 : 0;
+    const ini = turno === 1 ? 450 : turno === 2 ? 1050 : min;
+    let decorridos = min - ini;
+    if (decorridos < 0) decorridos += 1440;
+    return {
+      turno,
+      minutos: decorridos,
+      ok: this.okSim,
+      nok: 0,
+      porHora: decorridos >= 5 ? Math.round((this.okSim * 60) / decorridos) : 0,
+      semVeredito: 0,
+      okAnterior: 0,
+      nokAnterior: 0,
+      okTotal: this.okSim,
+      nokTotal: 0,
     };
   }
 

@@ -42,6 +42,23 @@ export interface RobotState {
   /** Paletes completos produzidos (contador do CLP). */
   paletesProduzidos: number;
 
+  /** Indicadores de produção do turno. `null` quando não há de onde tirar —
+   *  o bloco do CLP ainda não está carregado, ou a fonte é o simulador antes
+   *  do primeiro depósito. Melhor ausente e explícito do que zerado e
+   *  ambíguo: card com zeros o operador lê como produção parada. */
+  producao: {
+    turno: number;
+    minutos: number;
+    ok: number;
+    nok: number;
+    porHora: number;
+    semVeredito: number;
+    okAnterior: number;
+    nokAnterior: number;
+    okTotal: number;
+    nokTotal: number;
+  } | null;
+
   /** Status para a tela. Cada campo aqui existe para responder a UMA
    *  pergunta do operador ou da manutenção — nada de despejar sinal cru. */
   status: {
@@ -224,6 +241,29 @@ export interface RealPayload {
   almRobo: number;
   almBalanca: number;
   pressaoBar: number;
+
+  /** HR35..HR46 — produção por turno, do FB "08 - INDICADORES".
+   *
+   *  Zerado enquanto esse bloco não estiver carregado no CLP: as holdings
+   *  existem no DB e ninguém escreve nelas. Quem consome distingue "zero
+   *  porque não produziu" de "zero porque o bloco não existe" pelos TOTAIS,
+   *  que nunca zeram depois do primeiro turno. */
+  producao: {
+    turno: number;          // 0 fora de turno · 1 · 2
+    minutos: number;        // decorridos do turno
+    ok: number;
+    nok: number;
+    porHora: number;        // só OK
+    /** Das NÃO OK, quantas por AUSÊNCIA de veredito da balança. É
+     *  SUBCONJUNTO de `nok`, não uma terceira categoria — somar as duas
+     *  conta a mesma peça duas vezes. Serve para separar problema de
+     *  produto de problema de integração. */
+    semVeredito: number;
+    okAnterior: number;
+    nokAnterior: number;
+    okTotal: number;        // acumulado, DInt de 32 bits
+    nokTotal: number;
+  };
 
   /** HR0..3 — a integração de balança que já existia */
   balanca: {

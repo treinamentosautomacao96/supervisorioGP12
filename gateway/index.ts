@@ -9,8 +9,9 @@
 //  deixaria as instâncias intercambiáveis, e o gateway poderia ocupar as duas
 //  vagas numa reconexão — derrubando a balança e parando a linha.
 //
-//  Lê HR0..HR34 a cada 100 ms, decodifica e publica no broker. Sem estado
-//  próprio: morrer e renascer não perde nada.
+//  Lê HR0..HR46 a cada 100 ms, decodifica e publica no broker. Sem estado
+//  próprio: morrer e renascer não perde nada — os contadores de produção
+//  moram no CLP (FB "08 - INDICADORES"), justamente por isso.
 //
 //  Configuração via .env nesta pasta (ver .env.example):
 //    PLC_IP    o IP do S7
@@ -32,7 +33,10 @@ const MQTT_URL = process.env.MQTT_URL ?? "mqtt://localhost:1883";
 const TOPICO = process.env.MQTT_TOPICO ?? "multilaser/paletizadora/r01/estado";
 
 const POLL_MS = 100;
-const QTD_REG = 35;                  // HR0..HR34 (o mapa completo da FC 07)
+// HR0..HR46: o mapa da FC 07 (ate HR34) mais os indicadores de producao do
+// FB 08 (HR35..HR46). Ler 47 words de uma vez custa o mesmo que ler 35 --
+// o custo do Modbus esta na ida e volta, nao no tamanho.
+const QTD_REG = 47;
 const HEARTBEAT_TIMEOUT_MS = 2000;
 // SINAL DE VIDA. Publicar só quando muda economiza rede, mas cria um engano:
 // célula parada com o CLP rodando não muda NADA, então o gateway ficava
@@ -203,6 +207,29 @@ async function le() {
       statusLado1: int16(data[32]),
       statusLado2: int16(data[33]),
       autoManual: int16(data[34]),
+
+      // HR35..HR46 — produção por turno, do FB "08 - INDICADORES".
+      //
+      // Enquanto esse bloco não estiver carregado no CLP, estas holdings
+      // valem zero: existem no DB, ninguém escreve nelas. Quem consome
+      // precisa distinguir "zero porque não produziu" de "zero porque o
+      // bloco não existe" — os TOTAIS servem para isso, porque nunca zeram
+      // depois do primeiro turno.
+      producao: {
+        turno: int16(data[35]),
+        minutos: int16(data[36]),
+        ok: int16(data[37]),
+        nok: int16(data[38]),
+        porHora: int16(data[39]),
+        semVeredito: int16(data[40]),
+        okAnterior: int16(data[41]),
+        nokAnterior: int16(data[42]),
+        // DInt em duas words, parte alta primeiro. Sem sinal de propósito:
+        // contador acumulado não anda para trás, e tratar como Int limitaria
+        // a 32.767 em vez de 4 bilhões.
+        okTotal: data[43] * 65536 + data[44],
+        nokTotal: data[45] * 65536 + data[46],
+      },
     };
 
     // Publica quando MUDA, e de qualquer forma uma vez por segundo — este

@@ -63,6 +63,24 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:19px;font-variant-n
   color:var(--warn);text-align:center;pointer-events:none;
 }
 
+/* ---- INDICADORES DE PRODUCAO com dado de verdade -------------------------
+   OK e NAO OK ganham caixa propria e fonte grande: sao os dois numeros que
+   alguem procura ao chegar no turno. O resto vira sinal comum. */
+.prod{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
+.prod-par{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.prod-caixa{
+  border:1px solid var(--line);border-radius:5px;padding:9px 11px;
+  display:flex;flex-direction:column;gap:2px;background:var(--panel-2);
+}
+.prod-caixa span{font-size:10px;letter-spacing:.12em;color:var(--muted)}
+.prod-caixa b{font-family:var(--font-data);font-size:26px;font-weight:600;
+  line-height:1.05;font-variant-numeric:tabular-nums}
+.prod-caixa.ok b{color:var(--good)}
+/* NAO OK so pinta quando existe. Zero em vermelho treina o olho a ignorar. */
+.prod-caixa.nok{border-color:color-mix(in srgb,#E5484D 45%,transparent)}
+.prod-caixa.nok b{color:#FF6369}
+.prod .sinais{padding:0}
+
 .grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px}
 @media (max-width:860px){.grid{grid-template-columns:1fr}}
 
