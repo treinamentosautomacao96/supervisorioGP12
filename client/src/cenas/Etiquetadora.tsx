@@ -16,6 +16,8 @@
 //    dois portais de perfil 30 x 30 (alturas a confirmar):
 //      portal 1 a  800 mm da ENTRADA
 //      portal 2 a 1900 mm do FIM
+//    dois leitores Keyence SR-X300W em CADA portal, lendo os códigos dentro
+//    da caixa — que passa ABERTA (confirmado)
 //
 //  SENTIDO DO FLUXO: entra em -X, sai em +X.
 //
@@ -81,7 +83,27 @@ export const PORTAIS = [
   { nome: "portal 2", x: SAIDA_X - 1900, cota: "1900 mm do fim" },
 ] as const;
 
+// Leitores de código Keyence SR-X300W: DOIS por portal, olhando para baixo,
+// lendo os códigos DENTRO da caixa — que vem aberta (confirmado).
+//
+// As dimensões do corpo são APROXIMADAS: não tenho a folha de dados aqui. O
+// que importa para a cena é o volume e a postura, não o milímetro; com as
+// cotas reais é trocar estes três números.
+//
+// Os dois ficam lado a lado atravessando a esteira, cada um cobrindo cerca de
+// metade da largura. Se na célula estiverem em tandem (um atrás do outro) ou
+// em ângulos diferentes, muda aqui.
+export const CAMERA = {
+  larg: 95, alt: 62, prof: 50,     // corpo, aproximado
+  afastamento: 175,                // do centro da esteira, para cada lado
+  inclinacao: 12,                  // graus, apontando para o centro
+  alcance: 900,                    // até onde desenhar o cone de visão
+} as const;
+
+const rad = (g: number) => (g * Math.PI) / 180;
+
 const ALUMINIO = "#9AA6B2";
+const CAM_CORPO = "#2B333C";
 const CINZA_ESTR = "#5A6B7C";
 const CINZA_ESC = "#39434E";
 const CORREIA = "#2F8B5B";
@@ -200,6 +222,10 @@ function Portal({ x }: { x: number }) {
         <meshStandardMaterial color={ALUMINIO} roughness={0.42} metalness={0.55} />
       </mesh>
 
+      {/* os dois leitores de código, pendurados na travessa */}
+      <Leitor lado={-1} />
+      <Leitor lado={1} />
+
       {/* cantoneiras: o que dá rigidez ao portal e o que se vê de longe */}
       {[-1, 1].map((lado) => (
         <mesh
@@ -211,6 +237,93 @@ function Portal({ x }: { x: number }) {
           <boxGeometry args={[perfil * 0.8, 250, perfil * 0.8]} />
           <meshStandardMaterial color={ALUMINIO} roughness={0.5} metalness={0.5} />
         </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Um leitor SR-X300W: corpo, janela da lente, iluminador e o cone de visão.
+ *
+ *  O cone não é enfeite — é o que deixa ver se os dois leitores cobrem a
+ *  largura da esteira e se a caixa passa dentro do campo. */
+function Leitor({ lado }: { lado: 1 | -1 }) {
+  const { larg, alt, prof, afastamento, inclinacao, alcance } = CAMERA;
+  const y = PORTAL.altura - PORTAL.perfil - alt / 2 - 10;
+  return (
+    <group position={[0, y, lado * afastamento]} rotation-x={lado * rad(inclinacao)}>
+      <mesh castShadow>
+        <boxGeometry args={[larg, alt, prof]} />
+        <meshStandardMaterial color={CAM_CORPO} roughness={0.5} metalness={0.4} />
+      </mesh>
+      {/* janela da lente, virada para baixo */}
+      <mesh position={[0, -alt / 2 - 0.6, 0]} rotation-x={-Math.PI / 2}>
+        <planeGeometry args={[larg * 0.55, prof * 0.6]} />
+        <meshStandardMaterial
+          color="#101820" roughness={0.15} metalness={0.7}
+          emissive="#0A2A33" emissiveIntensity={0.6}
+        />
+      </mesh>
+      {/* iluminador vermelho: a marca visual de leitor de código */}
+      <mesh position={[0, -alt / 2 - 0.4, prof * 0.3]} rotation-x={-Math.PI / 2}>
+        <planeGeometry args={[larg * 0.7, 8]} />
+        <meshBasicMaterial color="#E5484D" transparent opacity={0.75} />
+      </mesh>
+      {/* suporte preso à travessa do portal */}
+      <mesh position={[0, alt / 2 + 12, 0]} castShadow>
+        <boxGeometry args={[larg * 0.5, 24, prof * 0.8]} />
+        <meshStandardMaterial color="#4A545F" roughness={0.55} metalness={0.45} />
+      </mesh>
+      {/* cone de visão */}
+      <mesh position={[0, -alcance / 2 - alt / 2, 0]}>
+        <coneGeometry args={[alcance * 0.42, alcance, 4, 1, true]} />
+        <meshBasicMaterial
+          color="#4FC4D6" transparent opacity={0.07} side={THREE.DoubleSide}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/** A caixa do produto, ABERTA em cima — confirmado pelo autor da célula.
+ *  É o que permite aos leitores do portal enxergarem os códigos lá dentro. */
+function CaixaAberta() {
+  const { comp, larg, alt } = CAIXA;
+  const e = 8;                         // espessura do papelão
+  const PAPEL = "#A97C4B";
+  const DENTRO = "#8A6238";
+  return (
+    <group>
+      {/* fundo */}
+      <mesh position={[0, -alt / 2 + e / 2, 0]} receiveShadow>
+        <boxGeometry args={[comp, e, larg]} />
+        <meshStandardMaterial color={DENTRO} roughness={0.9} />
+      </mesh>
+      {/* paredes compridas */}
+      {[larg / 2 - e / 2, -larg / 2 + e / 2].map((z, i) => (
+        <mesh key={`l${i}`} position={[0, 0, z]} castShadow receiveShadow>
+          <boxGeometry args={[comp, alt, e]} />
+          <meshStandardMaterial color={PAPEL} roughness={0.85} />
+        </mesh>
+      ))}
+      {/* paredes curtas */}
+      {[comp / 2 - e / 2, -comp / 2 + e / 2].map((x, i) => (
+        <mesh key={`c${i}`} position={[x, 0, 0]} castShadow receiveShadow>
+          <boxGeometry args={[e, alt, larg]} />
+          <meshStandardMaterial color={PAPEL} roughness={0.85} />
+        </mesh>
+      ))}
+      {/* o conteúdo, com a etiqueta para cima: é isto que os leitores buscam */}
+      {[-1, 0, 1].map((k) => (
+        <group key={k} position={[k * 145, -alt / 2 + 70, 0]}>
+          <mesh castShadow>
+            <boxGeometry args={[130, 130, larg - 40]} />
+            <meshStandardMaterial color="#C8D2DA" roughness={0.7} />
+          </mesh>
+          <mesh position={[0, 66, 0]} rotation-x={-Math.PI / 2}>
+            <planeGeometry args={[86, 46]} />
+            <meshStandardMaterial color="#F2F5F7" roughness={0.6} />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -228,15 +341,7 @@ function Caixas() {
     <group>
       {xs.map((x, i) => (
         <group key={i} position={[x, y, 0]}>
-          <mesh castShadow receiveShadow>
-            <boxGeometry args={[CAIXA.comp, CAIXA.alt, CAIXA.larg]} />
-            <meshStandardMaterial color="#A97C4B" roughness={0.85} />
-          </mesh>
-          {/* fita de fechamento no topo, só para a caixa não ser um bloco liso */}
-          <mesh position={[0, CAIXA.alt / 2 + 0.6, 0]} rotation-x={-Math.PI / 2}>
-            <planeGeometry args={[CAIXA.comp, 48]} />
-            <meshStandardMaterial color="#8A6238" roughness={0.8} />
-          </mesh>
+          <CaixaAberta />
         </group>
       ))}
     </group>
