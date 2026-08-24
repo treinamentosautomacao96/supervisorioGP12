@@ -17,9 +17,12 @@
 body{
   background:var(--ground);color:var(--ink);
   font-family:var(--font-ui);font-size:14px;line-height:1.45;
-  min-height:100vh;padding:20px;
+  min-height:100vh;padding:12px 14px;
 }
-.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+/* Sem teto de largura: em monitor de chao de fabrica, limitar a 1120px
+   deixava faixas mortas dos dois lados e espremia a cena. O painel tem
+   largura fixa, entao tudo o que a tela ganha vai para o 3D. */
+.wrap{width:100%;margin:0 auto;display:flex;flex-direction:column;gap:10px}
 
 header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 header h1{font-size:17px;font-weight:600;letter-spacing:.02em}
@@ -42,7 +45,25 @@ header .relogio b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-
 .pill.off{color:#E5484D;border-color:color-mix(in srgb,#E5484D 45%,transparent)}
 .pill.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 
-.grid{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:14px}
+/* ---- INDICADORES DE PRODUCAO: lugar reservado, ainda sem numero ----------
+   Desfocado e selado de proposito. Um card com zeros seria lido como
+   producao parada; borrado, ninguem confunde com dado. Os valores atras do
+   borrao sao travessoes -- nao ha numero escondido ali. */
+.wip{position:relative;padding:12px}
+.wip-conteudo{
+  filter:blur(4px);opacity:.5;user-select:none;pointer-events:none;
+  display:flex;flex-direction:column;gap:9px;
+}
+.wip-linha{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.wip-linha span{font-size:11px;letter-spacing:.08em;color:var(--muted)}
+.wip-linha b{font-family:var(--font-data);font-size:15px;color:var(--ink)}
+.wip-selo{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-data);font-size:10px;font-weight:600;letter-spacing:.16em;
+  color:var(--warn);text-align:center;pointer-events:none;
+}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:10px}
 @media (max-width:860px){.grid{grid-template-columns:1fr}}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:6px}
@@ -51,8 +72,9 @@ header .relogio b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-
   font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--muted);
 }
 
-.stage{padding:10px;position:relative}
-.stage .canvas-box{height:560px;border-radius:4px;overflow:hidden;background:var(--panel-2)}
+.stage{padding:6px;position:relative}
+/* Altura pela JANELA, nao fixa em 560px: a cena cresce com o monitor. */
+.stage .canvas-box{height:calc(100vh - 132px);min-height:420px;border-radius:4px;overflow:hidden;background:var(--panel-2)}
 .stage canvas{touch-action:none}
 .dica{
   position:absolute;left:22px;bottom:20px;

@@ -65,6 +65,24 @@ export function Panel({ robot }: { robot: RobotLink }) {
             ninguém mediu não vai para a tela de quem opera. */}
       </section>
 
+      {/* ============ INDICADORES DE PRODUÇÃO — ainda não existem ============
+          Desfocado e marcado de propósito. O lugar fica reservado na tela e
+          fica EXPLÍCITO que não há número aqui — melhor do que um card com
+          zeros, que o operador leria como produção parada. Os valores atrás
+          do borrão são fictícios, e é por isso que não podem ser lidos. */}
+      <section className="card">
+        <div className="card-title">INDICADORES DE PRODUÇÃO</div>
+        <div className="wip">
+          <div className="wip-conteudo" aria-hidden="true">
+            <div className="wip-linha"><span>PEÇAS / HORA</span><b>—</b></div>
+            <div className="wip-linha"><span>PALETES NO TURNO</span><b>—</b></div>
+            <div className="wip-linha"><span>DISPONIBILIDADE</span><b>—</b></div>
+            <div className="wip-linha"><span>TEMPO DE CICLO</span><b>—</b></div>
+          </div>
+          <span className="wip-selo">EM DESENVOLVIMENTO</span>
+        </div>
+      </section>
+
       {/* ============ ROBÔ: está em condição de produzir? ============ */}
       {st && (
         <section className="card">

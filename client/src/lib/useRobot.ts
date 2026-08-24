@@ -33,6 +33,7 @@ export function useRobot(): RobotLink {
   const [connected, setConnected] = useState(false);
   const liveRef = useRef<RobotState | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const ultimoRender = useRef(0);
 
   useEffect(() => {
     let alive = true;
@@ -61,7 +62,24 @@ export function useRobot(): RobotLink {
           const anterior = liveRef.current;
           const completo = { ...(anterior ?? {}), ...msg } as RobotState;
           liveRef.current = completo;
-          setState(completo);
+
+          // ------------------------------------------------------------------
+          //  A REF A 25 Hz, O ESTADO REACT A 5 Hz
+          //
+          //  A cena 3D lê a ref dentro de `useFrame` e não depende de render
+          //  nenhum. Quem usa `state` é o PAINEL DE TEXTO — fases, contagens,
+          //  lâmpadas — e ninguém lê texto 25 vezes por segundo.
+          //
+          //  Antes, cada quadro de rede disparava um render do App, e com ele
+          //  a reconciliação da árvore inteira: robô, célula e as 64 caixas,
+          //  25 vezes por segundo, concorrendo com o laço de 60 fps que de
+          //  fato desenha. Em PC modesto isso aparece como queda de fps.
+          // ------------------------------------------------------------------
+          const agora = Date.now();
+          if (agora - ultimoRender.current >= 200) {
+            ultimoRender.current = agora;
+            setState(completo);
+          }
         }
       };
       ws.onclose = () => {

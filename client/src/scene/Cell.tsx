@@ -4,7 +4,7 @@
 // ============================================================================
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Grid, OrbitControls } from "@react-three/drei";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import * as THREE from "three";
 import { Robot } from "./Robot";
 import { CaixaVentilador } from "./CaixaVentilador";
@@ -314,7 +314,12 @@ function CaixaNaEsteira({ live, pick, box }: {
   );
 }
 
-export function Cell({ live, layout, placed }: {
+/** A cena. MEMOIZADA de propósito: ela não depende do estado que chega a cada
+ *  quadro — lê tudo pela `live`, dentro do `useFrame`. As únicas coisas que
+ *  justificam remontar a árvore são a lista de caixas mudar e o layout chegar
+ *  no `hello`. Sem isto, cada render do App reconciliava robô, célula e as 64
+ *  caixas por nada, concorrendo com o laço que de fato desenha. */
+function CenaDaCelula({ live, layout, placed }: {
   live: React.MutableRefObject<RobotState | null>;
   layout: HelloMsg["layout"];
   placed: PlacedBox[];
@@ -324,6 +329,12 @@ export function Cell({ live, layout, placed }: {
       shadows
       camera={{ position: [3200, 2200, 2800], fov: 40, near: 10, far: 40000 }}
       gl={{ antialias: true }}
+      // TETO DE RESOLUÇÃO. Sem isto, a cena é desenhada na densidade de
+      // pixels do monitor: numa tela 4K são quatro vezes mais pixels por
+      // quadro do que numa tela comum, para uma diferença que ninguém enxerga
+      // a esta distância. É a causa mais frequente de "roda liso no notebook
+      // e engasga no PC da fábrica" — muda o monitor, muda o custo.
+      dpr={[1, 1.5]}
     >
       <color attach="background" args={["#0D1319"]} />
       <hemisphereLight args={["#AFC2D8", "#141B22", 0.85]} />
@@ -420,3 +431,5 @@ export function Cell({ live, layout, placed }: {
     </Canvas>
   );
 }
+
+export const Cell = memo(CenaDaCelula);
