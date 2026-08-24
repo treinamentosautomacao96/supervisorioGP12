@@ -13,7 +13,9 @@
 //  O QUE JÁ ESTÁ AQUI
 //    esteira de 6000 x 700, topo da correia a 900 mm do chão
 //    caixa do produto 460 x 170 x 220 (orientação a confirmar)
-//    portal de perfil 30 x 30 a 800 mm da entrada (altura a confirmar)
+//    dois portais de perfil 30 x 30 (alturas a confirmar):
+//      portal 1 a  800 mm da ENTRADA
+//      portal 2 a 1900 mm do FIM
 //
 //  SENTIDO DO FLUXO: entra em -X, sai em +X.
 //
@@ -45,6 +47,7 @@ export const ESTEIRA = {
 // SENTIDO DO FLUXO: a caixa ENTRA em -X e corre para +X. Tudo o que for
 // "distância da entrada" conta a partir de x = -comp/2.
 export const ENTRADA_X = -ESTEIRA.comp / 2;
+export const SAIDA_X = ESTEIRA.comp / 2;
 
 // Caixa do produto: 46 x 17 x 22 cm.
 //
@@ -58,15 +61,25 @@ export const CAIXA = {
   alt: 220,
 } as const;
 
-// Portal de perfil de alumínio 30 x 30, a 800 mm da entrada.
-// A ALTURA ainda não foi informada — 1500 mm deixa 380 mm de vão livre sobre
-// o topo da caixa (que fica a 1120 do chão). Marcado como palpite.
+// Portais de perfil de alumínio 30 x 30.
+//
+// Um é cotado a partir da ENTRADA e o outro a partir do FIM da esteira, que
+// foi como cada um veio informado. Guardar a cota original, e não só o X
+// resultante, evita ter de refazer a conta de cabeça quando a esteira mudar
+// de comprimento.
+//
+// A ALTURA de nenhum dos dois foi informada — 1500 mm deixa 380 mm de vão
+// livre sobre o topo da caixa (que fica a 1120 do chão). Palpite explícito.
 export const PORTAL = {
   perfil: 30,
-  distEntrada: 800,
-  altura: 1500,       // <- CONFIRMAR
+  altura: 1500,       // <- CONFIRMAR (vale para os dois, por enquanto)
   vaoExtra: 90,       // quanto as colunas ficam para fora da esteira
 } as const;
+
+export const PORTAIS = [
+  { nome: "portal 1", x: ENTRADA_X + 800, cota: "800 mm da entrada" },
+  { nome: "portal 2", x: SAIDA_X - 1900, cota: "1900 mm do fim" },
+] as const;
 
 const ALUMINIO = "#9AA6B2";
 const CINZA_ESTR = "#5A6B7C";
@@ -153,9 +166,8 @@ function Esteira() {
  *  Perfil estruturado de verdade tem ranhura nas quatro faces; aqui o vinco
  *  é sugerido por uma faixa mais escura no meio de cada face. A esta
  *  distância isso lê como alumínio estruturado sem custar geometria. */
-function Portal() {
-  const { perfil, distEntrada, altura, vaoExtra } = PORTAL;
-  const x = ENTRADA_X + distEntrada;
+function Portal({ x }: { x: number }) {
+  const { perfil, altura, vaoExtra } = PORTAL;
   const meiaLarg = ESTEIRA.larg / 2 + vaoExtra;
 
   return (
@@ -209,8 +221,9 @@ function Portal() {
 function Caixas() {
   const y = ESTEIRA.altura + ESTEIRA.correia + CAIXA.alt / 2;
   // uma antes do portal, uma sob ele, e duas adiante
-  const xs = [ENTRADA_X + 300, ENTRADA_X + PORTAL.distEntrada,
-              ENTRADA_X + 1800, ENTRADA_X + 2900];
+  // uma na entrada, uma sob cada portal, e uma a caminho da saída
+  const xs = [ENTRADA_X + 300, PORTAIS[0].x, ENTRADA_X + 3400, PORTAIS[1].x,
+              SAIDA_X - 600];
   return (
     <group>
       {xs.map((x, i) => (
@@ -300,7 +313,7 @@ function CenaEtiquetadora({ girar = false }: { girar?: boolean }) {
       />
 
       <Esteira />
-      <Portal />
+      {PORTAIS.map((p) => <Portal key={p.nome} x={p.x} />)}
       <Caixas />
       <Cotas />
       <CameraQueGira ativo={girar} />
