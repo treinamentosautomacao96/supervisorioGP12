@@ -26,6 +26,22 @@ import type { RobotState } from "../../../shared/types";
 
 const CHAVE = "supervisorio.voz";
 
+/** De quanto em quanto tempo o aviso de palete pronto se repete. */
+const INTERVALO_MS = 5000;
+/** Teto de insistência: 10 minutos. Ver o comentário no disparo. */
+const MAX_REPETICOES = 120;
+
+/** UMA frase para os dois lados, e não duas seguidas: `falar` cancela o que
+ *  estiver na fila, então duas chamadas em sequência calariam a primeira. */
+function fraseProntos(lados: Set<"A" | "B">): string {
+  const tem1 = lados.has("A"), tem2 = lados.has("B");
+  if (tem1 && tem2) {
+    return "Atenção. Paletização dos lados 1 e 2 finalizada. Paletes prontos para retirada.";
+  }
+  return `Atenção. Paletização do lado ${tem1 ? 1 : 2} finalizada. `
+    + "Palete pronto para retirada.";
+}
+
 /** Fala uma frase, se o navegador souber. Cancela o que estiver na fila:
  *  aviso de célula é como rádio de operação — o mais recente é o que importa,
  *  e uma fila acumulada falaria sobre um estado que já passou. */
@@ -61,6 +77,9 @@ export function useVoz(estado: RobotState | null): Voz {
     try { return localStorage.getItem(CHAVE) === "1"; } catch { return false; }
   });
 
+  // `alternar` é criado antes de `parar`; a ref evita a ordem circular.
+  const pararRef = useRef<(() => void) | null>(null);
+
   const alternar = useCallback(() => {
     setLigado((antes) => {
       const agora = !antes;
@@ -69,7 +88,7 @@ export function useVoz(estado: RobotState | null): Voz {
       // operador que o som funciona — e, se estiver mudo, ele descobre agora
       // e não na primeira emergência.
       if (agora) falar("Avisos sonoros ligados");
-      else window.speechSynthesis?.cancel();
+      else { window.speechSynthesis?.cancel(); pararRef.current?.(); }
       return agora;
     });
   }, []);
@@ -79,6 +98,30 @@ export function useVoz(estado: RobotState | null): Voz {
     countA: number; countB: number; emergencia: boolean;
     falha: boolean; paleteA: boolean; paleteB: boolean;
   } | null>(null);
+
+  // ---- AVISO INSISTENTE DE PALETE PRONTO ---------------------------------
+  //  Palete cheio parado é linha parada: avisar uma vez e calar não resolve
+  //  se ninguém estiver olhando. Repete a cada 5 s até alguém ATENDER.
+  //
+  //  "Atender" é qualquer uma destas, e não só a porta:
+  //     - porta aberta      (o que você pediu: o operador foi lá)
+  //     - palete retirado   (o objetivo de fato aconteceu)
+  //     - contagem zerada   (palete novo no lugar)
+  //  Parar só na porta deixaria o aviso tocando depois de o palete já ter
+  //  saído, se a retirada acontecer com a porta fechada.
+  const pendentes = useRef<Set<"A" | "B">>(new Set());
+  const timer = useRef<number | null>(null);
+  const repeticoes = useRef(0);
+
+  const parar = useCallback(() => {
+    if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
+    pendentes.current.clear();
+    repeticoes.current = 0;
+  }, []);
+
+  useEffect(() => { pararRef.current = parar; }, [parar]);
+  // Sair da tela não deixa temporizador vivo.
+  useEffect(() => () => { if (timer.current !== null) clearInterval(timer.current); }, []);
 
   useEffect(() => {
     if (!estado) return;
@@ -100,11 +143,37 @@ export function useVoz(estado: RobotState | null): Voz {
 
     // ---- paletização de um lado concluída -------------------------------
     // A borda é a contagem ALCANÇAR o total do palete, não "estar" nele.
-    if (a.countA < porPalete && atual.countA >= porPalete) {
-      falar("Paletização do lado 1 finalizada. Palete pronto para retirada.");
-    }
-    if (a.countB < porPalete && atual.countB >= porPalete) {
-      falar("Paletização do lado 2 finalizada. Palete pronto para retirada.");
+    const encheu = (antes: number, agora: number) =>
+      antes < porPalete && agora >= porPalete;
+    if (encheu(a.countA, atual.countA)) pendentes.current.add("A");
+    if (encheu(a.countB, atual.countB)) pendentes.current.add("B");
+
+    // ---- quem já foi atendido sai da lista -------------------------------
+    // A porta aberta atende OS DOIS: o operador está lá dentro.
+    if (!estado.status.portas) pendentes.current.clear();
+    // Palete retirado ou contagem zerada: aquele lado foi resolvido.
+    if (!atual.paleteA || atual.countA === 0) pendentes.current.delete("A");
+    if (!atual.paleteB || atual.countB === 0) pendentes.current.delete("B");
+
+    if (pendentes.current.size === 0) {
+      parar();
+    } else if (timer.current === null) {
+      // Fala JÁ e agenda a repetição. Esperar 5 s pelo primeiro aviso
+      // atrasaria justamente o instante em que ele é mais útil.
+      falar(fraseProntos(pendentes.current));
+      repeticoes.current = 1;
+      timer.current = window.setInterval(() => {
+        if (pendentes.current.size === 0) { parar(); return; }
+        // TETO DE REPETIÇÕES. Você pediu "até identificar porta aberta", e é
+        // isso que acontece — mas nesta célula já vimos um sensor travado
+        // ligado o dia inteiro (o SP5). Um aviso que nunca cala ensina o
+        // operador a desligar o som, e aí ele perde também o de emergência.
+        // Dez minutos insistindo é bastante; depois disso o problema deixou
+        // de ser falta de aviso.
+        if (repeticoes.current >= MAX_REPETICOES) { parar(); return; }
+        repeticoes.current += 1;
+        falar(fraseProntos(pendentes.current));
+      }, INTERVALO_MS);
     }
 
     // ---- palete retirado -------------------------------------------------
