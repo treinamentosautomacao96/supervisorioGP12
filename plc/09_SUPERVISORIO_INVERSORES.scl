@@ -1,0 +1,215 @@
+// ============================================================================
+//  FC "09 - SUPERVISORIO INVERSORES"
+//
+//  Publica o estado de UM inversor nas HOLDINGS do Modbus. Chamado uma vez
+//  por inversor, com o índice base de cada um — mesmo padrão do SINA_SPEED,
+//  que é um bloco só chamado uma vez por acionamento.
+//
+//  Na célula são DOIS: esteira de ENTRADA e esteira da BALANÇA.
+//
+//  Continua o mapa do FC "07 - SUPERVISORIO", que ocupa HR10..HR34, e do
+//  FB "08 - INDICADORES", que ocupa HR35..HR46.
+//
+//  SOMENTE LEITURA do processo: lê a struct do inversor e escreve no DB de
+//  Modbus. Não comanda nada. O supervisório observa, não move.
+//
+//  ---------------------------------------------------------------- MAPA -----
+//   HR47..49    folga proposital, para os indicadores crescerem
+//
+//   HR50..59    INVERSOR 1 — esteira de ENTRADA
+//   HR60..69    INVERSOR 2 — esteira da BALANÇA
+//   HR70..99    livres — um terceiro inversor entraria em 70
+//
+//  SÃO DOIS, e o mapa é contínuo por isso. A versão anterior reservava um
+//  bloco no meio para uma esteira de SAÍDA que não existe; furo em mapa de
+//  registrador é dívida silenciosa — alguém lê HR60 esperando a saída e
+//  encontra a balança. Um terceiro acionamento, se vier, entra em 70 sem
+//  mexer em nada do que já está publicado.
+//
+//  Dentro de cada bloco de dez, o deslocamento a partir do base:
+//   +0  bits   estado do acionamento
+//   +1  Int    velocidade REAL           rpm
+//   +2  Int    velocidade COMANDADA      rpm
+//   +3  Int    corrente real             CENTÉSIMOS de A   (60 = 0,60 A)
+//   +4  Int    torque real               CENTÉSIMOS de Nm  (85 = 0,85 Nm)
+//   +5  Int    potência real             W                 (150 = 0,15 kW)
+//   +6  Word   status do bloco SINA_SPEED
+//   +7  Word   diagId do bloco SINA_SPEED
+//   +8  Int    SELO de presença — vale o próprio `base`. Zero = não chamado
+//   +9  Int    livre
+//
+//  Os bits do deslocamento +0:
+//   X0  ligado            o drive confirma que está habilitado
+//   X1  bloqueado         lockout do SINA_SPEED
+//   X2  erro / alarme
+//   X3  RESERVADO         STO liberado, quando o programa F exportar a tag
+//   X4  RESERVADO         aguarda reset — QBAD do F-I/O, idem
+//   X5..X15  livres
+//
+//  ------------------------------------------------------ POR QUE Int -------
+//  Holding Modbus é Word de 16 bits; os valores do drive são Real de 32.
+//  Mandar Real gastaria duas words por número e obrigaria o gateway a
+//  remontar float com a ordem de bytes certa — fonte clássica de valor
+//  invertido que ninguém percebe.
+//
+//  Escalar para Int mantém uma word por número e segue o que o projeto já
+//  faz na HR25, que é pressão em centésimos de bar. Quem for conferir lê a
+//  mesma convenção nos dois lugares.
+//
+//  A resolução escolhida é a que o valor merece: corrente e torque em
+//  centésimos porque andam na casa da unidade; potência em watt porque
+//  centésimo de kW daria degrau de 10 W num motor de 250 W.
+//
+//  ------------------------------------------------- OS DOIS DE SEGURANÇA ---
+//  O bloco tem DOIS parâmetros, `inv` e `base`. Tudo o que ele publica sai da
+//  struct do inversor — não há mais parâmetros de segurança.
+//
+//  Houve uma versão com `stoLiberado` e `aguardaReset` como VAR_INPUT, para
+//  receber tags exportadas do programa F. Essas tags não existem, e as únicas
+//  fontes disponíveis eram BLOQUEADO e ERRO / ALARME — que o bloco já lê e
+//  publica em X1 e X2. Ligados assim, os parâmetros só transportariam de
+//  volta o que já estava na struct.
+//
+//  Por isso X3 e X4 ficam RESERVADOS, em zero, em vez de preenchidos com o
+//  que se tem à mão. Um bit chamado "STO liberado" é afirmação sobre o
+//  circuito de SEGURANÇA, e alguém decide se chega perto da esteira olhando
+//  para ela. Derivado do bloqueio do drive, esse bit estaria errado
+//  justamente no caso que importa: drive livre para girar, segurança aberta.
+//  Zero não é lacuna — é o bloco dizendo que não sabe, e a tela não mostra o
+//  campo enquanto ele não souber.
+//
+//  A pergunta "parada porque o processo não pediu, ou porque a segurança
+//  travou?" continua sem resposta até o programa F exportar as tags. Quando
+//  exportar, elas entram em X3 e X4 e nada mais muda no mapa.
+//
+//  ------------------------------------------------------ COMO CHAMAR -------
+//  No fim do Main [OB1], depois do "07 - SUPERVISORIO":
+//
+//    "09 - SUPERVISORIO INVERSORES"(inv  := "COMANDOS"."ESTEIRA ENTRADA INV",
+//                                   base := 50);
+//
+//    "09 - SUPERVISORIO INVERSORES"(inv  := "COMANDOS"."ESTEIRA BALANCA INV",
+//                                   base := 60);
+//
+//  As duas chamadas rodam no MESMO ciclo, uma depois da outra — não há
+//  alternância. Alternar atualizaria cada acionamento na metade da
+//  frequência, e o gateway leria os dois blocos de ciclos diferentes.
+//
+//  Inversor que ainda não existe é simplesmente não chamado: as words dele
+//  ficam em zero, e o supervisório trata zero de escala como "sem dado" pelo
+//  bit de estado, que também fica zerado.
+//
+//  ------------------------------------------------------- O OUTRO LADO -----
+//  O caminho até a tela já está pronto: o gateway lê 70 words (`QTD_REG`),
+//  decodifica os dois blocos de dez e publica em `inversores`; o servidor
+//  usa o SELO para decidir presença; o cliente tem uma aba por acionamento.
+//
+//  Ou seja: assim que estas duas chamadas entrarem no Main e o projeto for
+//  carregado, as abas saem de "AGUARDANDO O CLP" sozinhas. Nada a alterar do
+//  lado do supervisório.
+// ============================================================================
+
+FUNCTION "09 - SUPERVISORIO INVERSORES" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+VAR_INPUT
+   inv          : "INVERSOR";   // a struct do acionamento
+   base         : Int;          // 50 = entrada · 60 = balança
+   // Só estes dois. Ver OS DOIS DE SEGURANÇA no cabeçalho para saber por que
+   // os parâmetros de segurança saíram daqui.
+END_VAR
+
+VAR_TEMP
+   wEstado : Word;
+END_VAR
+
+BEGIN
+
+   // =========================================================================
+   //  +0 — ESTADO do acionamento
+   //
+   //  TRÊS bits, e não cinco. Tudo o que este bloco sabe vem da struct do
+   //  inversor, e a struct tem três fatos: habilitado, bloqueado, em falha.
+   //
+   //  X3 e X4 continuam RESERVADOS. Preenchê-los com o que se tem à mão faria
+   //  X3 ser o inverso de X1 e X4 ser cópia de X2 — dois bits que não
+   //  acrescentam nada, e que a tela leria como leitura da SEGURANÇA. Aí está
+   //  o problema: "STO liberado" é afirmação sobre o circuito de segurança, e
+   //  alguém decide se chega perto da esteira com base nela. Derivada do
+   //  bloqueio do drive, ela seria falsa exatamente no caso que importa — o
+   //  drive livre para girar com a segurança aberta.
+   //
+   //  Zero aqui não é lacuna: é o bloco dizendo que não sabe. Quando o
+   //  programa F exportar as tags, elas entram nestes dois bits e a tela
+   //  passa a mostrar a informação sem mudar o mapa.
+   // =========================================================================
+   #wEstado := 0;
+   #wEstado.%X0 := #inv.STATUS."LIGADO / DESLIGADO";
+   #wEstado.%X1 := #inv.STATUS."BLOQUEADO";
+   #wEstado.%X2 := #inv.STATUS."ERRO / ALARME";
+   "MODBUS HOLDINGS".HOLDINGS[#base] := #wEstado;
+
+   // =========================================================================
+   //  +1 e +2 — VELOCIDADE real e comandada
+   //
+   //  As duas juntas, porque a diferença entre elas é diagnóstico: setpoint
+   //  em 1700 com real em 900 significa limite de corrente atuando, correia
+   //  patinando ou carga travando. Só a real não conta essa história.
+   // =========================================================================
+   "MODBUS HOLDINGS".HOLDINGS[#base + 1] := INT_TO_WORD(REAL_TO_INT(#inv.STATUS."VELOCIDADE ATUAL"));
+   "MODBUS HOLDINGS".HOLDINGS[#base + 2] := INT_TO_WORD(REAL_TO_INT(#inv.COMANDO."VELOCIDADE"));
+
+   // =========================================================================
+   //  +3 — CORRENTE, em centésimos de ampère
+   //
+   //  É o número mais valioso do conjunto. Com a contatora ninguém sabia
+   //  quanta corrente a esteira puxava; agora dá para acompanhar em regime.
+   //  Corrente subindo devagar ao longo de semanas é rolamento travando ou
+   //  correia tensionada — a esteira avisando antes de parar a linha.
+   //
+   //  Guarde a leitura do comissionamento como linha de base e compare.
+   // =========================================================================
+   "MODBUS HOLDINGS".HOLDINGS[#base + 3] := INT_TO_WORD(REAL_TO_INT(#inv.STATUS."CORRENTE ATUAL" * 100.0));
+
+   // =========================================================================
+   //  +4 e +5 — TORQUE e POTÊNCIA
+   //
+   //  Dependem de REF TORQUE e REF POTENCIA estarem corretos na struct, com
+   //  os valores de p2003 e r2004 lidos do drive. Referência errada, ou
+   //  pior, em zero, faz estes dois números serem ficção convincente.
+   // =========================================================================
+   "MODBUS HOLDINGS".HOLDINGS[#base + 4] := INT_TO_WORD(REAL_TO_INT(#inv.STATUS."TORQUE ATUAL" * 100.0));
+   "MODBUS HOLDINGS".HOLDINGS[#base + 5] := INT_TO_WORD(REAL_TO_INT(#inv.STATUS."POTENCIA ATUAL" * 1000.0));
+
+   // =========================================================================
+   //  +6 e +7 — DIAGNÓSTICO do bloco, em bruto
+   //
+   //  Publicados sem tradução, de propósito. Código novo no SINA_SPEED não
+   //  vai exigir voltar ao CLP: quem traduz é o supervisório, que se altera
+   //  sem parar a linha.
+   // =========================================================================
+   "MODBUS HOLDINGS".HOLDINGS[#base + 6] := #inv.STATUS."STATUS ERRO / ALARME";
+   "MODBUS HOLDINGS".HOLDINGS[#base + 7] := #inv.STATUS."DIAGNOSTICO ERRO / ALARME";
+
+   // =========================================================================
+   //  +8 — SELO DE PRESENÇA
+   //
+   //  Sem ele, os dez registradores de um inversor PARADO são idênticos aos
+   //  de um bloco que nunca foi chamado: tudo zero. E os dois casos pedem
+   //  ações opostas — um é a esteira esperando o processo, o outro é o
+   //  supervisório mostrando ficção. O truque do FB 08, olhar os totais
+   //  acumulados, não serve aqui: acionamento não tem acumulado, tem estado,
+   //  e estado legítimo pode ser zero a manhã inteira.
+   //
+   //  Escrever o próprio `base` resolve: valor não-nulo que só existe se o
+   //  bloco rodou, e que ainda diz em qual bloco de dez ele acha que está.
+   //
+   //  É CONSTANTE de propósito, não um contador de varredura. Contador
+   //  mudaria a cada ciclo e obrigaria o gateway a publicar 10 vezes por
+   //  segundo para sempre — o protocolo delta morreria para provar algo que
+   //  a leitura do CLP já prova.
+   // =========================================================================
+   "MODBUS HOLDINGS".HOLDINGS[#base + 8] := INT_TO_WORD(#base);
+
+END_FUNCTION

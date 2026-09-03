@@ -323,6 +323,69 @@ export class Gp12Simulator extends EventEmitter {
   private timer: NodeJS.Timeout;
 
   /** Posição cartesiana atual do TCP no plano do braço (raio, altura). */
+  // ==========================================================================
+  //  INVERSORES SIMULADOS
+  //
+  //  Números INVENTADOS, como todo o resto deste arquivo — servem para a tela
+  //  existir antes de o bloco 09 entrar no CLP, e para conferir a aba sem
+  //  depender da fábrica. Na fonte real nada disto é usado.
+  //
+  //  Vale a pena serem dinâmicos e não constantes: o mostrador de velocidade
+  //  precisa ser visto RAMPANDO, e a corrente parada esconderia justamente o
+  //  defeito que a tela existe para mostrar. A rampa é atraso de primeira
+  //  ordem, e o passo é normalizado pelo dt para não depender do quadro.
+  // ==========================================================================
+  private rpmEntrada = 0;
+  private rpmBalanca = 0;
+  private relogioInv = 0;
+
+  private giraInversores(dt: number) {
+    this.relogioInv += dt;
+    // A esteira de ENTRADA anda quando há caixa a caminho da balança; a da
+    // BALANÇA, só enquanto a caixa está sendo transferida. Amarrar aos
+    // estados que já existem é mais barato do que inventar um ciclo próprio,
+    // e faz a tela concordar com a cena ao lado.
+    // A de ENTRADA anda enquanto a caixa viaja; a da BALANÇA entra no trecho
+    // final e para junto — é assim que duas esteiras em série se comportam,
+    // a de jusante partindo quando a peça a alcança. Depois que a pesagem
+    // conclui, as duas ficam paradas com a caixa em cima esperando o robô.
+    const emViagem = this.running && !this.trocando
+      && this.feedX !== null && !this.boxReady;
+    const alcancouBalanca = emViagem && this.feedX! < PICK.r + 420;
+    const alvoEntrada = emViagem ? 1450 : 0;
+    const alvoBalanca = alcancouBalanca ? 900 : 0;
+    const k = 1 - Math.exp(-dt * 2.5);
+    this.rpmEntrada += (alvoEntrada - this.rpmEntrada) * k;
+    this.rpmBalanca += (alvoBalanca - this.rpmBalanca) * k;
+  }
+
+  /** Corrente plausível para a rotação: uma parcela de vazio mais uma de
+   *  carga, com uma ondulação lenta em cima — motor em regime treme. */
+  private inversorSim(rpm: number, alvo: number, fase: number) {
+    const girando = rpm > 5;
+    const carga = rpm / 1450;
+    const corrente = girando
+      ? 0.42 + carga * 0.55 + Math.sin(this.relogioInv * 1.7 + fase) * 0.04
+      : 0;
+    return {
+      ligado: girando,
+      bloqueado: false,
+      erro: false,
+      // RESERVADOS, como no CLP: o bloco 09 deixa X3/X4 em zero até o
+      // programa F exportar as tags. Simular "liberado" aqui faria o gêmeo
+      // ser mais otimista do que o campo, e um dia alguém compararia os dois.
+      stoLiberado: false,
+      aguardaReset: false,
+      rpm: Math.round(rpm),
+      rpmComandado: alvo,
+      corrente: Math.round(corrente * 100) / 100,
+      torque: Math.round(carga * 1.35 * 100) / 100,
+      potencia: Math.round(corrente * 220 * 0.8),
+      status: 0,
+      diagId: 0,
+    };
+  }
+
   private tcpRY(): { r: number; y: number } {
     const t = fkTcp(this.j);
     return { r: Math.hypot(t.x, t.z), y: t.y };
@@ -391,6 +454,7 @@ export class Gp12Simulator extends EventEmitter {
     // O turbo acelera o TEMPO, não o robô: as velocidades de junta continuam
     // as do datasheet — o relógio da simulação é que corre mais depressa.
     const dt = dtReal * this.turbo;
+    this.giraInversores(dt);
     if (this.running) {
       // ------------------------- entrada: esteira -> balança ---------------
       // Uma caixa nova entra assim que a anterior sai da balança na garra.
@@ -554,6 +618,10 @@ export class Gp12Simulator extends EventEmitter {
       // conta como OK o que ele mesmo depositou e deixa NÃO OK em zero. O
       // turno vem do relógio, igual ao do CLP, para a tela ficar coerente.
       producao: this.indicadores(),
+      inversores: {
+        entrada: this.inversorSim(this.rpmEntrada, this.rpmEntrada > 5 ? 1450 : 0, 0),
+        balanca: this.inversorSim(this.rpmBalanca, this.rpmBalanca > 5 ? 900 : 0, 2.1),
+      },
       paleteA: !this.trocando,
       paleteB: !this.trocando,
       // Na troca os dois paletes saem de cena na empilhadeira, para trás —

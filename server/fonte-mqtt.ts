@@ -505,6 +505,7 @@ export class MqttSource extends EventEmitter {
         placed: [], boxIndex: 0, boxTotal: TOTAL, descartadas: 0, carryRot: 0,
         paleteA: false, paleteB: false, saidaA: 1, saidaB: 1,
         emergencia: false, paletesProduzidos: 0, producao: null,
+        inversores: { entrada: null, balanca: null },
         status: {
           remoto: false, servoOn: false, emCiclo: false, emHome: false,
           falha: false, almRobo: 0, automatico: false, portas: false,
@@ -571,6 +572,10 @@ export class MqttSource extends EventEmitter {
         ? p.producao
         : null,
       paletesProduzidos: p.paletesProduzidos ?? 0,
+      // Repassado como veio: quem decide presença é o SELO, lá no gateway,
+      // que já devolveu `null` para o acionamento cuja chamada não está no
+      // Main. Gateway antigo (47 words) não manda a chave — daí o `??`.
+      inversores: p.inversores ?? { entrada: null, balanca: null },
       status: {
         remoto: p.robo.remoto,
         servoOn: p.robo.servoOn,

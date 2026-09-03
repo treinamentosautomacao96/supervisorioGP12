@@ -3,6 +3,11 @@ node_modules/
 client/dist/
 # pacote de arquivo unico do gateway: gerado por `npm run pacote-gateway`
 dist-gateway/
+# os zips de levar para o PC da fabrica saem dos mesmos comandos. Versionar
+# um zip de 1,3 MB a cada mudanca do gateway incharia o repositorio com
+# binarios que ninguem consegue comparar entre versoes.
+dist-gateway.zip
+gateway.zip
 
 # segredos — NUNCA no repositório
 .env

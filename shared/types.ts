@@ -4,6 +4,45 @@
 
 export interface Vec3 { x: number; y: number; z: number }
 
+/** Um acionamento visto pelo supervisório — SÓ LEITURA.
+ *
+ *  Não há comando aqui de propósito: reconhecer falha e mudar setpoint são
+ *  ações com consequência física, e esta tela é vista de longe, às vezes por
+ *  quem passa. Quem religa a esteira faz isso na IHM da máquina, onde está
+ *  quem enxerga a esteira. */
+export interface Inversor {
+  /** O drive confirma que está habilitado. */
+  ligado: boolean;
+  /** Lockout do SINA_SPEED. */
+  bloqueado: boolean;
+  erro: boolean;
+  /** A segurança permite girar. Sem isto, "parado" não se distingue de
+   *  "impedido" — que é a pergunta nº 1 de quem acha uma esteira parada. */
+  stoLiberado: boolean;
+  /** F-I/O passivado: precisa do RESET SEGURANÇA, e não se resolve esperando. */
+  aguardaReset: boolean;
+  rpm: number;
+  /** O setpoint. A DIFERENÇA para o real é que diagnostica: comandado em
+   *  1700 com real em 900 é limite de corrente, correia patinando ou carga
+   *  travando. Só o real não conta essa história. */
+  rpmComandado: number;
+  /** A (ampère). O número mais valioso do conjunto: subindo devagar ao longo
+   *  de semanas é rolamento travando ou correia tensionada. */
+  corrente: number;
+  torque: number;   // Nm
+  potencia: number; // W
+  /** Diagnóstico do SINA_SPEED em bruto — traduzido aqui, não no CLP. */
+  status: number;
+  diagId: number;
+}
+
+/** Os dois acionamentos da célula. Cada lado é `null` enquanto a chamada
+ *  correspondente da FC 09 não estiver no Main do CLP. */
+export interface Inversores {
+  entrada: Inversor | null;
+  balanca: Inversor | null;
+}
+
 /** Caixa depositada: posição do centro + orientação (giro em torno do vertical). */
 export interface PlacedBox extends Vec3 { rot: number }
 
@@ -58,6 +97,9 @@ export interface RobotState {
     okTotal: number;
     nokTotal: number;
   } | null;
+
+  /** Os dois inversores das esteiras (HR50..69, do FC 09). */
+  inversores: Inversores;
 
   /** Status para a tela. Cada campo aqui existe para responder a UMA
    *  pergunta do operador ou da manutenção — nada de despejar sinal cru. */
@@ -135,7 +177,23 @@ export interface HelloMsg {
  *  antes de qualquer quadro parcial; sem isso não haveria o que manter. */
 export type StateMsg = { type: "state" } & Partial<RobotState>;
 
-export type ServerMsg = HelloMsg | StateMsg;
+/** PULSO — o servidor dizendo que está vivo, e se a FONTE também está.
+ *
+ *  Existe por causa do próprio protocolo delta: quadro sem novidade não é
+ *  enviado, então silêncio na rede não distingue "célula parada" de "dado
+ *  travado". Sem este pulso, a tela teria de tratar as duas do mesmo jeito —
+ *  e recarregar sozinha toda vez que o robô ficasse um minuto sem se mexer.
+ *
+ *  `fonteViva` é o que o SERVIDOR sabe e o navegador não: houve quadro da
+ *  fonte ativa há pouco. Com ele, a tela separa "o servidor sumiu" de "o
+ *  servidor está aí e o dado é que parou" — duas falhas com donos
+ *  diferentes.
+ *
+ *  Custo: ~30 bytes a cada 5 s por cliente, uns 15 MB por mês. Contra os
+ *  4,2 GB do enlace, é ruído. */
+export type PulsoMsg = { type: "pulso"; fonteViva: boolean };
+
+export type ServerMsg = HelloMsg | StateMsg | PulsoMsg;
 
 /** Comandos da IHM para o servidor. O servidor valida tudo. */
 export type ClientCmd =
@@ -263,6 +321,16 @@ export interface RealPayload {
     nokAnterior: number;
     okTotal: number;        // acumulado, DInt de 32 bits
     nokTotal: number;
+  };
+
+  /** HR50..HR69 — os dois acionamentos, do FC "09 - SUPERVISORIO INVERSORES".
+   *
+   *  Opcional na raiz porque um gateway ANTIGO, ainda lendo 47 words, não
+   *  manda esta chave. Sem o `?`, atualizar o servidor antes do PC de fábrica
+   *  quebraria a tela inteira por causa de um campo que ela nem mostra. */
+  inversores?: {
+    entrada: Inversor | null;
+    balanca: Inversor | null;
   };
 
   /** HR0..3 — a integração de balança que já existia */

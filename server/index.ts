@@ -19,7 +19,9 @@ import fs from "node:fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { Gp12Simulator, PHASES, PICK, PALLET, BOX, PED } from "./simulator.js";
 import { MqttSource } from "./fonte-mqtt.js";
-import type { ClientCmd, HelloMsg, RobotState, StateMsg } from "../shared/types.js";
+import type {
+  ClientCmd, HelloMsg, PulsoMsg, RobotState, StateMsg,
+} from "../shared/types.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -212,7 +214,12 @@ const ultimo: Record<"sim" | "real", Map<string, string>> = {
   real: new Map(),
 };
 
+/** Quando chegou o último quadro de cada fonte. É o que o PULSO carrega:
+ *  o servidor sabe se a fonte está falando; o navegador, não. */
+const ultimoQuadro: Record<"sim" | "real", number> = { sim: 0, real: 0 };
+
 function broadcast(state: RobotState, de: "sim" | "real") {
+  ultimoQuadro[de] = Date.now();
   const completo = enxuto(state, de);
   const anterior = ultimo[de];
 
@@ -252,6 +259,34 @@ function broadcast(state: RobotState, de: "sim" | "real") {
     c.send(parcial);
   }
 }
+
+// ---------------------------------------------------------------- pulso --
+//  Uma batida a cada 5 s para cada cliente, com ou sem novidade.
+//
+//  O protocolo delta não manda quadro repetido — é o que derrubou o tráfego
+//  42 vezes —, mas isso deixa o navegador sem como distinguir "célula parada"
+//  de "servidor sumiu". O pulso resolve dizendo as duas coisas de uma vez:
+//  ele CHEGAR prova que o servidor está aí; o `fonteViva` dentro dele prova
+//  que a fonte está falando.
+//
+//  Sem isso, a recarga automática da tela teria de disparar em cima do
+//  silêncio — e silêncio, aqui, é o estado normal de uma célula parada.
+const PULSO_MS = 5000;
+/** Além de quanto tempo sem quadro a fonte é dada por morta. Três vezes o
+ *  período do pulso: um quadro perdido não condena ninguém. */
+const FONTE_MORTA_MS = 15000;
+
+setInterval(() => {
+  const agora = Date.now();
+  for (const c of wss.clients) {
+    if (c.readyState !== WebSocket.OPEN) continue;
+    const de = fonteDo(c);
+    c.send(JSON.stringify({
+      type: "pulso",
+      fonteViva: agora - ultimoQuadro[de] < FONTE_MORTA_MS,
+    } satisfies PulsoMsg));
+  }
+}, PULSO_MS);
 
 // 50 Hz de simulação -> 25 Hz de rede; a fonte real já emite a 25 Hz.
 let skip = false;

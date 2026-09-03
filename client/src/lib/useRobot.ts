@@ -15,6 +15,10 @@ export interface RobotLink {
   phases: string[];
   layout: HelloMsg["layout"];
   connected: boolean;
+  /** Quando chegou o último sinal de que os DADOS estão vivos: um quadro de
+   *  estado, ou um pulso dizendo que a fonte fala. Ref, não estado: quem lê
+   *  é um cronômetro, e isto muda 25 vezes por segundo. */
+  ultimoDadoRef: React.MutableRefObject<number>;
   liveRef: React.MutableRefObject<RobotState | null>;
   send: (cmd: ClientCmd) => void;
 }
@@ -34,6 +38,7 @@ export function useRobot(): RobotLink {
   const liveRef = useRef<RobotState | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const ultimoRender = useRef(0);
+  const ultimoDadoRef = useRef(Date.now());
 
   useEffect(() => {
     let alive = true;
@@ -44,13 +49,26 @@ export function useRobot(): RobotLink {
       const ws = new WebSocket(`${proto}://${location.host}/ws`);
       wsRef.current = ws;
 
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        setConnected(true);
+        // Conexão nova ganha crédito: o primeiro quadro pode demorar, e
+        // contar o tempo de espera como "sem dado" acusaria falha em quem
+        // acabou de chegar.
+        ultimoDadoRef.current = Date.now();
+      };
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data) as ServerMsg;
         if (msg.type === "hello") {
           setPhases(msg.phases);
           setLayout(msg.layout);
+        } else if (msg.type === "pulso") {
+          // O PULSO só conta como sinal de vida se a FONTE estiver falando.
+          // Servidor de pé com a fonte muda não é comunicação — é uma tela
+          // bonita mostrando o passado, e é justamente o caso que o operador
+          // descreve como "travou".
+          if (msg.fonteViva) ultimoDadoRef.current = Date.now();
         } else if (msg.type === "state") {
+          ultimoDadoRef.current = Date.now();
           // `placed` e `status` só vêm quando mudam — ausentes, valem os
           // últimos recebidos. É daqui que sai a economia de banda: eram
           // 76,5 % do tráfego, retransmitidos 25 vezes por segundo embora
@@ -103,5 +121,5 @@ export function useRobot(): RobotLink {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(cmd));
   };
 
-  return { state, phases, layout, connected, liveRef, send };
+  return { state, phases, layout, connected, liveRef, ultimoDadoRef, send };
 }

@@ -33,10 +33,14 @@ const MQTT_URL = process.env.MQTT_URL ?? "mqtt://localhost:1883";
 const TOPICO = process.env.MQTT_TOPICO ?? "multilaser/paletizadora/r01/estado";
 
 const POLL_MS = 100;
-// HR0..HR46: o mapa da FC 07 (ate HR34) mais os indicadores de producao do
-// FB 08 (HR35..HR46). Ler 47 words de uma vez custa o mesmo que ler 35 --
-// o custo do Modbus esta na ida e volta, nao no tamanho.
-const QTD_REG = 47;
+// HR0..HR69: o mapa da FC 07 (ate HR34), os indicadores de producao do
+// FB 08 (HR35..HR46) e os dois inversores da FC 09 (HR50..HR69). Ler 70
+// words de uma vez custa o mesmo que ler 35 -- o custo do Modbus esta na ida
+// e volta, nao no tamanho. HR47..49 sao folga: entram na leitura de graca.
+const QTD_REG = 70;
+/** Onde cada acionamento publica seu bloco de dez (ver a FC 09). */
+const INV_ENTRADA = 50;
+const INV_BALANCA = 60;
 const HEARTBEAT_TIMEOUT_MS = 2000;
 // SINAL DE VIDA. Publicar só quando muda economiza rede, mas cria um engano:
 // célula parada com o CLP rodando não muda NADA, então o gateway ficava
@@ -54,6 +58,72 @@ const primeiroBit = (w: number, base: number, qtd: number) => {
   for (let i = 0; i < qtd; i++) if (bit(w, base + i)) return i + 1;
   return 0;
 };
+
+// ---------------------------------------------------------------------------
+//  INVERSORES — ler dez words e devolver grandezas de engenharia.
+//
+//  ZONA MORTA. Corrente de motor NÃO fica parada: em regime ela treme uns
+//  poucos centésimos de ampère, e cada tremida é um valor diferente. Sem
+//  filtro, o payload mudaria em toda leitura e o gateway publicaria 10 vezes
+//  por segundo, para sempre — o protocolo delta viraria enfeite e a linha
+//  MQTT pagaria a conta o dia inteiro para transmitir ruído.
+//
+//  O filtro guarda o último valor PUBLICADO e só se move quando a diferença
+//  merece: o JSON continua byte a byte igual enquanto o número oscila dentro
+//  do passo. Deriva lenta não escapa — a comparação é sempre contra o último
+//  publicado, então os centésimos se acumulam até cruzarem o passo.
+//
+//  Os passos são a resolução em que alguém DECIDE alguma coisa: 5 rpm num
+//  motor de 1700, 0,05 A, 0,05 Nm, 5 W. Abaixo disso é ruído com aparência
+//  de medida.
+// ---------------------------------------------------------------------------
+function zonaMorta(passo: number) {
+  let ultimo: number | null = null;
+  return (v: number) => {
+    if (ultimo === null || Math.abs(v - ultimo) >= passo) ultimo = v;
+    return ultimo;
+  };
+}
+
+/** Um jogo de filtros por acionamento — o estado tem de viver ENTRE leituras,
+ *  senão cada uma compararia contra o nada e a zona morta não filtraria. */
+const filtrosDe = () => ({
+  rpm: zonaMorta(5),
+  rpmCmd: zonaMorta(5),
+  corrente: zonaMorta(0.05),
+  torque: zonaMorta(0.05),
+  potencia: zonaMorta(5),
+});
+const filtros: Record<number, ReturnType<typeof filtrosDe>> = {
+  [INV_ENTRADA]: filtrosDe(),
+  [INV_BALANCA]: filtrosDe(),
+};
+
+/** `null` quando o SELO está zerado: a FC 09 não foi chamada para este
+ *  acionamento. Sem o selo seria impossível distinguir isso de um inversor
+ *  parado com a segurança aberta — os dez registradores são zero nos dois
+ *  casos, e a tela mostraria um drive que não existe. */
+function inversor(data: number[], base: number) {
+  if (data[base + 8] !== base) return null;
+  const f = filtros[base];
+  const e = data[base];
+  return {
+    ligado: bit(e, 0),
+    bloqueado: bit(e, 1),
+    erro: bit(e, 2),
+    stoLiberado: bit(e, 3),
+    aguardaReset: bit(e, 4),
+    rpm: f.rpm(int16(data[base + 1])),
+    rpmComandado: f.rpmCmd(int16(data[base + 2])),
+    corrente: f.corrente(int16(data[base + 3]) / 100),
+    torque: f.torque(int16(data[base + 4]) / 100),
+    potencia: f.potencia(int16(data[base + 5])),
+    // Sem tradução, de propósito: código novo no SINA_SPEED não deve exigir
+    // voltar ao gateway. Quem traduz é o supervisório.
+    status: data[base + 6],
+    diagId: data[base + 7],
+  };
+}
 
 const modbus = new ModbusRTU();
 const broker = mqtt.connect(MQTT_URL, {
@@ -229,6 +299,14 @@ async function le() {
         // a 32.767 em vez de 4 bilhões.
         okTotal: data[43] * 65536 + data[44],
         nokTotal: data[45] * 65536 + data[46],
+      },
+
+      // HR50..HR69 — os dois acionamentos, do FC "09 - SUPERVISORIO
+      // INVERSORES". Cada lado é `null` até a chamada correspondente entrar
+      // no Main: ausente e explícito, nunca zerado e ambíguo.
+      inversores: {
+        entrada: inversor(data, INV_ENTRADA),
+        balanca: inversor(data, INV_BALANCA),
       },
     };
 

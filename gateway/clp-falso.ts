@@ -286,12 +286,59 @@ function payload(): RealPayload {
       peso: fase === "PRONTA" ? 1 : fase === "REPROVADA" ? 2 : 0,
       lifeBit: (hb & 1) === 1,
     },
+    inversores: {
+      entrada: acionamento(rpmEntrada, 1450, 0),
+      balanca: acionamento(rpmBalanca, 900, 1.9),
+    },
+  };
+}
+
+// ---- ACIONAMENTOS ---------------------------------------------------------
+// Rampa de verdade, e não degrau: a tela do inversor mostra o desvio entre
+// real e comandado, e com salto instantâneo esse desvio seria sempre 0 ou
+// 100 % — nunca daria para ver se o alerta acende na hora certa. Atraso de
+// primeira ordem normalizado pelo dt, como no gêmeo do servidor.
+let rpmEntrada = 0;
+let rpmBalanca = 0;
+
+function giraInversores(dt: number) {
+  const k = 1 - Math.exp(-dt * 2.5);
+  rpmEntrada += ((fase === "CHEGANDO" ? 1450 : 0) - rpmEntrada) * k;
+  rpmBalanca += ((naBalanca && fase === "PESANDO" ? 900 : 0) - rpmBalanca) * k;
+}
+
+/** Corrente plausível: parcela de vazio mais parcela de carga, com uma
+ *  ondulação lenta em cima — motor em regime não fica com o número parado, e
+ *  é justamente essa tremida que a zona morta do gateway existe para filtrar.
+ *  Sem ela aqui, o filtro nunca seria exercitado no desenvolvimento. */
+function acionamento(rpm: number, nominal: number, fase0: number) {
+  const girando = rpm > 5;
+  const carga = rpm / nominal;
+  const corrente = girando
+    ? 0.42 + carga * 0.55 + Math.sin(hb / 10 + fase0) * 0.04
+    : 0;
+  return {
+    ligado: girando,
+    bloqueado: false,
+    erro: false,
+    // RESERVADOS no bloco 09 — X3/X4 chegam em zero do CLP de verdade, e o
+    // CLP falso mente menos se mentir igual.
+    stoLiberado: false,
+    aguardaReset: false,
+    rpm: Math.round(rpm),
+    rpmComandado: girando ? nominal : 0,
+    corrente: Math.round(corrente * 100) / 100,
+    torque: Math.round(carga * 1.35 * 100) / 100,
+    potencia: Math.round(corrente * 220 * 0.8),
+    status: 0,
+    diagId: 0,
   };
 }
 
 const PASSO_MS = 100;
 setInterval(() => {
   avanca(PASSO_MS / 1000);
+  giraInversores(PASSO_MS / 1000);
   hb++;
   if (cli.connected) cli.publish(TOPICO, JSON.stringify(payload()), { retain: true });
 }, PASSO_MS);
