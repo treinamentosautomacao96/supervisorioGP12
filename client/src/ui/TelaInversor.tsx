@@ -63,29 +63,43 @@ function Corrente({ serie }: { serie: number[] }) {
   // Escala mínima de 1 A para a linha do zero não virar ruído amplificado:
   // sem piso, uma esteira parada desenharia montanhas de 0,01 A.
   const teto = Math.max(1, ...serie) * 1.15;
+  const n = serie.length;
+
+  // A SÉRIE OCUPA A LARGURA TODA, sempre — o eixo mede o que existe, e o
+  // título diz quanto é.
+  //
+  // A primeira versão ancorava o "agora" na direita e reservava as três
+  // horas... os três minutos inteiros de eixo, então nos primeiros instantes
+  // desenhava uma curva espremida num canto com quatro quintos do painel em
+  // branco. Numa TV vista de longe isso não se lê como "a janela ainda está
+  // enchendo", se lê como gráfico quebrado — e por causa da recarga
+  // automática, que zera a série sem ninguém por perto, esse é um estado
+  // frequente, não um detalhe dos primeiros minutos de vida da página.
+  const passo = n > 1 ? L / (n - 1) : 0;
   const pontos = serie
-    .map((v, i) => {
-      // Ancorado à DIREITA: o instante de agora fica sempre na mesma coluna,
-      // e a série cresce para a esquerda enquanto não enche a janela. Se
-      // crescesse da esquerda, o "agora" caminharia pela tela nos primeiros
-      // três minutos e o gráfico pareceria outro a cada olhada.
-      const x = L - (serie.length - 1 - i) * (L / (HIST_PONTOS - 1));
-      return `${x.toFixed(1)},${(A - (v / teto) * A).toFixed(1)}`;
-    })
+    .map((v, i) => `${(i * passo).toFixed(1)},${(A - (v / teto) * A).toFixed(1)}`)
     .join(" ");
+
+  // Uma amostra por segundo (ver useHistorico), então o comprimento da série
+  // É o intervalo. Em segundos até dois minutos, depois em minutos cheios —
+  // arredondar para baixo garante que o rótulo nunca prometa mais história
+  // do que o desenho tem.
+  const janela = n >= HIST_PONTOS ? "ÚLTIMOS 3 MINUTOS"
+    : n > 119 ? `ÚLTIMOS ${Math.floor(n / 60)} MINUTOS`
+    : `ÚLTIMOS ${n} SEGUNDOS`;
 
   return (
     <div className="grafico">
       <div className="grafico-topo">
-        <span>CORRENTE · ÚLTIMOS 3 MINUTOS</span>
+        <span>CORRENTE · {janela}</span>
         <span className="grafico-teto">{teto.toFixed(2)} A</span>
       </div>
       <svg viewBox={`0 0 ${L} ${A}`} preserveAspectRatio="none" role="img"
-           aria-label="corrente dos últimos três minutos">
-        {serie.length > 1 && (
+           aria-label={`corrente, ${janela.toLowerCase()}`}>
+        {n > 1 && (
           <>
             <polyline className="grafico-area"
-              points={`${L - (serie.length - 1) * (L / (HIST_PONTOS - 1))},${A} ${pontos} ${L},${A}`} />
+              points={`0,${A} ${pontos} ${L},${A}`} />
             <polyline className="grafico-linha" points={pontos} />
           </>
         )}
@@ -104,7 +118,7 @@ export function TelaInversor({ nome, inv, serie }: {
   // coisa — é a chamada do bloco 09 que ainda não está no Main do CLP.
   if (!inv) {
     return (
-      <section className="card tela-inv">
+      <section className="card tela-inv tela-inv-vazia">
         <div className="card-title">{nome}</div>
         <div className="wip wip-grande">
           <div className="wip-conteudo" aria-hidden="true">

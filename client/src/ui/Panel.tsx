@@ -62,22 +62,25 @@ export function Panel({ robot, voz }: { robot: RobotLink; voz: Voz }) {
           o operador lê como produção parada. Quem decide é o servidor, que
           manda `producao: null` enquanto o FB 08 não estiver no CLP. */}
       <section className="card">
+        {/* "PRODUÇÃO" e não "INDICADORES DE PRODUÇÃO": com o turno emendado, o
+            título comprido quebrava em duas linhas e deixava o número do turno
+            sozinho na segunda. A palavra "INDICADORES" não distinguia este
+            card de nenhum outro — todos são indicadores. */}
         <div className="card-title">
-          INDICADORES DE PRODUÇÃO
+          PRODUÇÃO
           {prod ? ` · TURNO ${prod.turno === 0 ? "—" : prod.turno}` : ""}
         </div>
         {prod ? (
           <div className="prod">
-            <div className="prod-par">
-              <div className="prod-caixa ok">
-                <span>PEÇAS OK</span>
-                <b>{prod.ok}</b>
-              </div>
-              <div className={"prod-caixa" + (prod.nok > 0 ? " nok" : "")}>
-                <span>NÃO OK</span>
-                <b>{prod.nok}</b>
-              </div>
-            </div>
+            {/* SEM o par OK / NÃO OK aqui: ele já está no PLACAR sobre a
+                cena, em corpo maior e no canto para onde o olho vai primeiro.
+                Repetido, custava ~150 px de painel e empurrava SEGURANÇA para
+                baixo da dobra numa TV — onde ninguém rola. O card que responde
+                "por que não dá para religar?" sumindo para o card que repete
+                um número já visível é a pior troca possível.
+
+                O que fica aqui é o que o placar NÃO conta: ritmo, tempo de
+                turno, refugo, e o acumulado. */}
             <div className="sinais">
               <Sinal rotulo="PEÇAS / HORA" valor={String(prod.porHora)} />
               <Sinal
