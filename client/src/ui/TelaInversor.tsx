@@ -36,7 +36,7 @@ const hex = (n: number) => "0x" + n.toString(16).toUpperCase().padStart(4, "0");
 function estado(inv: Inversor): { texto: string; classe: string } {
   if (inv.erro) return { texto: "EM FALHA", classe: "ruim" };
   if (inv.bloqueado) return { texto: "BLOQUEADO", classe: "atencao" };
-  if (inv.ligado && inv.rpm > 5) return { texto: "EM MARCHA", classe: "ok" };
+  if (inv.ligado && inv.rpm > 5) return { texto: "GIRANDO", classe: "ok" };
   return { texto: "PARADO", classe: "" };
 }
 

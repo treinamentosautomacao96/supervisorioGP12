@@ -4,6 +4,7 @@ import { Panel } from "./ui/Panel";
 import { BarraAbas } from "./ui/BarraAbas";
 import type { ItemAba } from "./ui/BarraAbas";
 import { TelaInversor } from "./ui/TelaInversor";
+import { MotoresSobreCena } from "./ui/MotoresSobreCena";
 import { useRobot } from "./lib/useRobot";
 import { useVoz } from "./lib/useVoz";
 import { useAutoReload } from "./lib/useAutoReload";
@@ -33,7 +34,6 @@ function Relogio() {
 
 export function App() {
   const robot = useRobot();
-  const prod = robot.state?.producao ?? null;
   const voz = useVoz(robot.state);
   //  Sem DADO por 20 s, a página se recarrega sozinha — duas vezes, e para.
   //  Duas bastam para o que o navegador consegue consertar; persistindo
@@ -77,8 +77,7 @@ export function App() {
   return (
     <div className="wrap">
       <header>
-        <h1>Supervisório · Célula R-01</h1>
-        <span className="tag">MOTOMAN GP12 · PALETIZAÇÃO · mm</span>
+        <h1>ROBÔ GP12 YASKAWA - DIGITAL TWIN</h1>
         <span className="spacer" />
         <Relogio />
         {/* O SELO FALA EM VOZ ALTA o que está acontecendo. Tela que se
@@ -135,23 +134,17 @@ export function App() {
               placed={robot.state?.placed ?? []}
             />
           </div>
-          {/* PLACAR sobre a cena, canto superior esquerdo.
-              `pointer-events: none` no CSS é obrigatório: sem isso ele
-              engoliria o arraste do mouse e a órbita da câmera morreria
-              naquele canto. Opacidade baixa para não competir com o robô —
-              é informação de canto de olho, não o assunto principal. */}
-          {prod && (
-            <div className="placar">
-              <div className="placar-item ok">
-                <b>{prod.ok}</b>
-                <span>PEÇAS OK</span>
-              </div>
-              <div className={"placar-item" + (prod.nok > 0 ? " nok" : "")}>
-                <b>{prod.nok}</b>
-                <span>PEÇAS NOK</span>
-              </div>
-            </div>
-          )}
+          {/* Aqui ficava um PLACAR com PEÇAS OK e PEÇAS NOK em corpo grande.
+              Saiu: a contagem por turno virou assunto do dashboard do SYNC,
+              que a lê da `ventilador_pesagens` e sobrevive a um F5 desta
+              tela. Duas fontes para a mesma pergunta, divergindo por um,
+              valem menos que uma.
+
+              No lugar entrou o estado dos dois acionamentos — porque na TV o
+              rodízio é entre o dashboard e esta aba, e ninguém vai clicar em
+              ENTRADA ou BALANÇA de passagem. O que era repetição virou o
+              único lugar onde essa informação aparece sem um clique. */}
+          <MotoresSobreCena inv={inv} />
           <span className="dica">ARRASTE PARA ORBITAR · RODA PARA APROXIMAR</span>
         </section>
 

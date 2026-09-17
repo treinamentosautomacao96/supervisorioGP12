@@ -16,7 +16,10 @@
 //  Configuração via .env nesta pasta (ver .env.example):
 //    PLC_IP    o IP do S7
 //    PLC_PORT  503
-//    MQTT_URL / MQTT_USER / MQTT_PASS / MQTT_TOPICO
+//    MQTT_URL / MQTT_USER / MQTT_PASS / MQTT_TOPICO      broker de fora
+//    MQTT2_URL / MQTT2_USER / MQTT2_PASS / MQTT2_TOPICO_BASE   broker local
+//                                                        (opcional; sem ele,
+//                                                         nada muda)
 // ============================================================================
 import "dotenv/config";
 import ModbusRTU from "modbus-serial";
@@ -126,6 +129,29 @@ function inversor(data: number[], base: number) {
 }
 
 const modbus = new ModbusRTU();
+
+// ----------------------------------------------------------------------------
+//  DOIS BROKERS, DOIS CLIENTES INDEPENDENTES
+//
+//  O de fora (HiveMQ) alimenta o supervisório 3D no Render. O de dentro
+//  (10.1.5.10) alimenta o SYNC, que não sai da rede da fábrica.
+//
+//  DOIS CLIENTES, e não um publicando em dois lugares: são redes com
+//  disponibilidade diferente. Internet caindo não pode calar o SYNC, e o
+//  broker interno fora do ar não pode calar o supervisório. Um cliente só
+//  acoplaria os dois destinos ao pior dos dois.
+//
+//  O segundo é OPCIONAL: sem `MQTT2_URL` no .env, nada muda — o gateway se
+//  comporta exatamente como antes.
+// ----------------------------------------------------------------------------
+const MQTT2_URL = process.env.MQTT2_URL ?? "";
+// Base dos tópicos, no padrão que o SYNC já assina para a LO06
+// (`multi/linha/{LINHA}/...`). A célula entra como `multi/celula/{CELULA}/...`
+// — mesma gramática, recurso diferente, sem colidir com as linhas.
+const TOPICO2_BASE = process.env.MQTT2_TOPICO_BASE ?? "multi/celula/VENTILADOR";
+const TOPICO2_ESTADO = `${TOPICO2_BASE}/estado`;
+const TOPICO2_ONLINE = `${TOPICO2_BASE}/online`;
+
 const broker = mqtt.connect(MQTT_URL, {
   username: process.env.MQTT_USER,
   password: process.env.MQTT_PASS,
@@ -133,6 +159,49 @@ const broker = mqtt.connect(MQTT_URL, {
 
 broker.on("connect", () => console.log(`[gateway] broker OK: ${MQTT_URL}`));
 broker.on("error", (e) => console.error(`[gateway] broker: ${e.message}`));
+
+const broker2 = MQTT2_URL
+  ? mqtt.connect(MQTT2_URL, {
+      username: process.env.MQTT2_USER,
+      password: process.env.MQTT2_PASS,
+      // Estado ao vivo NÃO se enfileira. Com o broker fora, guardar as
+      // mensagens só faria despejar minutos de histórico velho na volta —
+      // e a retida seguinte corrigiria tudo em 1 s de qualquer jeito.
+      // Enfileirar aqui seria memória gasta para entregar informação vencida.
+      queueQoSZero: false,
+      // ÚLTIMA VONTADE: se este processo morrer, o broker anuncia por ele.
+      // Sem isso, a retida de `online: true` ficaria para sempre e o SYNC
+      // mostraria a célula viva com o gateway morto — o mesmo engano que o
+      // `plcOk: false` conserta do lado do CLP.
+      will: {
+        topic: TOPICO2_ONLINE,
+        payload: JSON.stringify({ v: 1, online: false }),
+        qos: 1,
+        retain: true,
+      },
+    })
+  : null;
+
+broker2?.on("connect", () => {
+  console.log(`[gateway] broker local OK: ${MQTT2_URL} -> ${TOPICO2_BASE}`);
+  broker2.publish(TOPICO2_ONLINE, JSON.stringify({ v: 1, online: true }),
+    { qos: 1, retain: true });
+});
+broker2?.on("error", (e) => console.error(`[gateway] broker local: ${e.message}`));
+
+/**
+ * Publica o retrato da célula nos dois destinos.
+ *
+ * QoS 0 no estado, e não 1 como o contrato da LO06: a mensagem é RETIDA e se
+ * repete a cada segundo, então uma perdida se conserta sozinha antes de
+ * alguém notar. QoS 1 traria fila de reenvio que cresce sem teto numa queda
+ * longa — custo real para garantir a entrega de um dado que já vai ser
+ * substituído. O `online`, esse sim, vai em QoS 1: é raro e importa.
+ */
+function publicaEstado(json: string) {
+  broker.publish(TOPICO, json, { retain: true });
+  broker2?.publish(TOPICO2_ESTADO, json, { qos: 0, retain: true });
+}
 
 let conectado = false;
 let ultimoHb = -1;
@@ -319,7 +388,7 @@ async function le() {
     if (json !== ultimoJson || agora - ultimoEnvio >= VIDA_MS) {
       ultimoJson = json;
       ultimoEnvio = agora;
-      broker.publish(TOPICO, JSON.stringify(payload), { retain: true });
+      publicaEstado(JSON.stringify(payload));
     }
     ultimoPayload = payload;
   } catch (e) {
@@ -346,10 +415,8 @@ async function le() {
 // ----------------------------------------------------------------------------
 setInterval(() => {
   if (conectado || !ultimoPayload) return;   // nada a dizer que já não se disse
-  broker.publish(
-    TOPICO,
-    JSON.stringify({ ...ultimoPayload, ts: Date.now(), plcOk: false }),
-    { retain: true });
+  publicaEstado(
+    JSON.stringify({ ...ultimoPayload, ts: Date.now(), plcOk: false }));
 }, VIDA_MS);
 
 conecta();

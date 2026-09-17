@@ -18,8 +18,19 @@
 //
 //  3. O NAVEGADOR BLOQUEIA ÁUDIO SEM GESTO DO USUÁRIO. Falar antes de
 //     alguém clicar em algo é descartado em silêncio — o pior dos mundos,
-//     porque parece que funciona e não funciona. Por isso o padrão é
-//     DESLIGADO e quem liga é o botão: o clique serve de gesto.
+//     porque parece que funciona e não funciona.
+//
+//     O padrão agora é LIGADO, porque esta tela vive numa TV onde ninguém
+//     vai clicar em nada: um aviso de emergência que depende de alguém ter
+//     apertado um botão antes não avisa ninguém. Mas o bloqueio do navegador
+//     continua existindo, então `ligado` passou a significar "o operador
+//     quer ouvir", e não "dá para ouvir" — quem resolve a segunda parte é o
+//     destravamento no primeiro gesto, abaixo.
+//
+//     NA TV, onde gesto nenhum acontece, isso se resolve FORA daqui: o
+//     Chrome em modo quiosque precisa subir com
+//     `--autoplay-policy=no-user-gesture-required`. Sem essa flag, o som só
+//     começa depois do primeiro toque na tela.
 // ============================================================================
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RobotState } from "../../../shared/types";
@@ -73,8 +84,11 @@ export interface Voz {
 export function useVoz(estado: RobotState | null): Voz {
   const suportado = typeof window !== "undefined" && "speechSynthesis" in window;
 
+  // LIGADO por padrão: só fica mudo se alguém tiver DESLIGADO de propósito
+  // neste navegador. Daí o `!== "0"` em vez do `=== "1"` — a chave ausente é
+  // "nunca escolheu", que é diferente de "escolheu não".
   const [ligado, setLigado] = useState(() => {
-    try { return localStorage.getItem(CHAVE) === "1"; } catch { return false; }
+    try { return localStorage.getItem(CHAVE) !== "0"; } catch { return true; }
   });
 
   // `alternar` é criado antes de `parar`; a ref evita a ordem circular.
@@ -192,6 +206,34 @@ export function useVoz(estado: RobotState | null): Voz {
     }
     if (a.falha && !atual.falha) falar("Falha do robô resolvida.");
   }, [estado, ligado]);
+
+  // ---- DESTRAVAR NO PRIMEIRO GESTO ---------------------------------------
+  //  Com o padrão ligado, ninguém mais clica no botão — e era o clique dele
+  //  que servia de gesto para o navegador liberar o áudio. Qualquer toque ou
+  //  tecla na página passa a valer: uma fala VAZIA destrava a síntese sem
+  //  dizer nada, e o ouvinte não percebe que aconteceu.
+  //
+  //  Uma vez só, e os listeners saem em seguida: repetir a cada clique
+  //  cancelaria a fala em curso a cada órbita da câmera, que é o gesto mais
+  //  comum desta tela.
+  useEffect(() => {
+    if (!suportado) return;
+    const destrava = () => {
+      try {
+        const mudo = new SpeechSynthesisUtterance("");
+        mudo.volume = 0;
+        window.speechSynthesis.speak(mudo);
+      } catch { /* navegador sem suporte real; o `suportado` já cobre */ }
+      remove();
+    };
+    const remove = () => {
+      window.removeEventListener("pointerdown", destrava);
+      window.removeEventListener("keydown", destrava);
+    };
+    window.addEventListener("pointerdown", destrava, { once: true });
+    window.addEventListener("keydown", destrava, { once: true });
+    return remove;
+  }, [suportado]);
 
   // Sem isto, a lista de vozes vem vazia na primeira chamada em alguns
   // navegadores: ela é carregada de forma assíncrona.

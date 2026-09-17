@@ -22,6 +22,11 @@
 //  estado é informação: a essa altura o problema é a obtenção de dados do
 //  CLP, e é para lá que alguém tem de ir.
 //
+//  PARAR DE RECARREGAR, e não desistir da tela. Quando o dado volta — e ele
+//  volta sozinho, porque o WebSocket reconecta a cada segundo por conta
+//  própria —, a tarja sai e o contador volta a zero. O que desiste é a
+//  recarga, não o supervisório.
+//
 //  ------------------------------------------------- O QUE CONTA COMO "DADO"
 //  Não é "chegou mensagem". O protocolo é delta — quadro sem novidade não é
 //  enviado —, então silêncio na rede é o estado NORMAL de uma célula parada.
@@ -75,6 +80,12 @@ export function useAutoReload(ultimoDadoRef: {
           zerado.current = true;
           try { sessionStorage.removeItem(CHAVE); } catch { /* modo privado */ }
         }
+        // DESISTIR NÃO É PARA SEMPRE. O dado voltando, a tarja tem de sair:
+        // presa, ela manda verificar o CLP por cima de uma cena que está
+        // paletizando normalmente — e numa TV ligada dias seguidos esse é o
+        // estado em que ela para depois da primeira queda longa. Aviso que
+        // vira paisagem não avisa nada quando a falha for de verdade.
+        if (desistiu) setDesistiu(false);
         return;
       }
       zerado.current = false;

@@ -38,9 +38,15 @@
 //  integração — se HR40 subir sozinho, o defeito está na balança.
 //
 //  ------------------------------------------------------------- TURNOS ------
-//    Turno 1 ....... 07:30 às 17:30
-//    Turno 2 ....... 17:30 às 02:50   (atravessa a meia-noite)
-//    Fora de turno . 02:50 às 07:30   (indicador segue em 0)
+//    Turno 1 ....... 07:28 às 17:28
+//    Turno 2 ....... 17:28 às 02:58   (atravessa a meia-noite)
+//    Fora de turno . 02:58 às 07:28   (indicador segue em 0)
+//
+//  CORRIGIDO EM 17/09/2026. Estava 07:30 / 17:30 / 02:50, e estava ERRADO —
+//  confirmado pelo Kaique. Os horários certos são os mesmos da LO06, e são os
+//  que a dashboard do SYNC usa. Enquanto este bloco não for recarregado no
+//  CLP, o HR37/HR38 da IHM diverge da dashboard nas bordas do turno: peça
+//  entre 02:50 e 02:58 conta lá e não aqui, e o inverso entre 07:28 e 07:30.
 //
 //  Na virada, o turno que fecha é COPIADO para os campos "turno anterior" e
 //  os contadores do turno zeram. Assim o operador que entra vê a produção
@@ -125,13 +131,13 @@ BEGIN
    #erroHora := RD_LOC_T(#agora);
    #minutoDia := #agora.HOUR * 60 + #agora.MINUTE;
 
-   // 07:30 = 450 · 17:30 = 1050 · 02:50 = 170
-   IF #minutoDia >= 450 AND #minutoDia < 1050 THEN
+   // 07:28 = 448 · 17:28 = 1048 · 02:58 = 178
+   IF #minutoDia >= 448 AND #minutoDia < 1048 THEN
       #turnoAgora := 1;
-   ELSIF #minutoDia >= 1050 OR #minutoDia < 170 THEN
+   ELSIF #minutoDia >= 1048 OR #minutoDia < 178 THEN
       #turnoAgora := 2;                      // atravessa a meia-noite
    ELSE
-      #turnoAgora := 0;                      // 02:50 às 07:30
+      #turnoAgora := 0;                      // 02:58 às 07:28
    END_IF;
 
    // Relógio inválido: mantém o turno anterior em vez de fechar por engano.

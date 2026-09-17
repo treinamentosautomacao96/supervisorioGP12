@@ -304,7 +304,11 @@ let rpmBalanca = 0;
 function giraInversores(dt: number) {
   const k = 1 - Math.exp(-dt * 2.5);
   rpmEntrada += ((fase === "CHEGANDO" ? 1450 : 0) - rpmEntrada) * k;
-  rpmBalanca += ((naBalanca && fase === "PESANDO" ? 900 : 0) - rpmBalanca) * k;
+  // `naBalanca` é local de outro escopo (linha 212) e não existe aqui — o
+  // simulador quebrava no primeiro tick. A condição não muda ao removê-lo:
+  // `naBalanca` é "PESANDO ou PRONTA ou REPROVADA", e o `&&` já a restringia
+  // a PESANDO. `A && B` com B ⊂ A é B.
+  rpmBalanca += ((fase === "PESANDO" ? 900 : 0) - rpmBalanca) * k;
 }
 
 /** Corrente plausível: parcela de vazio mais parcela de carga, com uma

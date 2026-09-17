@@ -35,11 +35,6 @@ body{
 
 header{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header h1{font-size:17px;font-weight:600;letter-spacing:.02em}
-header .tag{
-  font-family:var(--font-data);font-size:11px;color:var(--muted);
-  border:1px solid var(--line);border-radius:3px;padding:2px 8px;
-  letter-spacing:.08em;
-}
 header .spacer{flex:1}
 header .relogio{
   font-family:var(--font-data);font-size:20px;color:var(--muted);
@@ -54,10 +49,11 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:30px;font-variant-n
 .pill.off{color:#E5484D;border-color:color-mix(in srgb,#E5484D 45%,transparent)}
 .pill.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 
-/* ---- INDICADORES DE PRODUCAO: lugar reservado, ainda sem numero ----------
-   Desfocado e selado de proposito. Um card com zeros seria lido como
-   producao parada; borrado, ninguem confunde com dado. Os valores atras do
-   borrao sao travessoes -- nao ha numero escondido ali. */
+/* ---- LUGAR RESERVADO, ainda sem numero -----------------------------------
+   Hoje so' a tela de um inversor usa isto, enquanto o FC 09 nao responde
+   pelo acionamento. Desfocado e selado de proposito: um card com zeros seria
+   lido como maquina parada; borrado, ninguem confunde com dado. Os valores
+   atras do borrao sao travessoes -- nao ha numero escondido ali. */
 .wip{position:relative;padding:12px}
 .wip-conteudo{
   filter:blur(4px);opacity:.5;user-select:none;pointer-events:none;
@@ -71,43 +67,6 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:30px;font-variant-n
   font-family:var(--font-data);font-size:12px;font-weight:600;letter-spacing:.16em;
   color:var(--warn);text-align:center;pointer-events:none;
 }
-
-/* ---- INDICADORES DE PRODUCAO com dado de verdade -------------------------
-   Havia aqui um par de caixas grandes com OK e NAO OK. Saiu: esses dois
-   numeros ja estao no PLACAR sobre a cena, em corpo maior e no canto para
-   onde o olho vai primeiro. Repetidos, custavam ~150 px e empurravam o card
-   SEGURANCA para baixo da dobra numa TV de 1080. Trocar "por que nao da para
-   religar" por um numero ja visivel duas vezes e o pior negocio da tela.
-   Aqui fica o que o placar NAO conta: ritmo, turno, refugo, acumulado. */
-.prod{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
-.prod .sinais{padding:0}
-
-/* ---- PLACAR sobre a cena ---------------------------------------------------
-   Canto superior, afastado da borda: encostado em 22px o numero grande
-   passava por baixo da moldura do card e parecia cortado.
-
-   `pointer-events:none` NAO e detalhe: sem ele o placar engoliria o arraste
-   do mouse e a orbita da camera morreria naquele canto da tela. */
-.placar{
-  position:absolute;left:56px;top:34px;display:flex;gap:44px;
-  pointer-events:none;user-select:none;
-  /* sobra para a sombra e para os digitos altos nao rasparem em nada */
-  padding:6px 10px;
-}
-.placar-item{display:flex;flex-direction:column;line-height:.95}
-.placar-item b{
-  font-family:var(--font-data);font-size:76px;font-weight:600;
-  font-variant-numeric:tabular-nums;color:var(--ink);opacity:.62;
-  text-shadow:0 3px 22px rgba(0,0,0,.75);
-}
-.placar-item span{
-  font-size:16px;font-weight:600;letter-spacing:.2em;color:var(--ink);
-  opacity:.5;margin-top:7px;text-shadow:0 2px 10px rgba(0,0,0,.7);
-}
-.placar-item.ok b{color:var(--good);opacity:.68}
-/* NAO OK so ganha cor quando existe: zero em vermelho treina o olho a
-   ignorar a cor, e ai o vermelho que importa passa batido. */
-.placar-item.nok b{color:#FF6369;opacity:.78}
 
 /* A coluna do painel CRESCE com a tela, ate um teto. Travada em 340px, numa
    TV de 55" ela virava uma tira estreita de texto minusculo ao lado de uma
@@ -276,6 +235,91 @@ header .relogio b{color:var(--ink);font-weight:600;font-size:30px;font-variant-n
   border-bottom:1px solid var(--line);
   font-size:clamp(13px,1.6vh,20px);font-weight:600;letter-spacing:.13em;
   color:var(--muted);
+}
+
+/* Divisor DENTRO de um card -- hoje o LADO 01 / LADO 02 da seguranca.
+   Menor e mais apagado que o titulo do card de proposito: ele agrupa, nao
+   anuncia. Do tamanho do titulo, a coluna pareceria tres cards colados e a
+   pessoa perderia que e' tudo seguranca. */
+.sub-title{
+  padding:clamp(9px,1.1vh,14px) clamp(12px,1vw,18px) 0;
+  font-size:clamp(13px,1.6vh,19px);font-weight:600;letter-spacing:.18em;
+  color:var(--muted);opacity:.85;
+}
+/* Colado no divisor: o espaco de cima ja veio dele. */
+.sub-title + .sinais{padding-top:6px}
+
+/* ---- MOTORES sobre a cena --------------------------------------------------
+   Ocupa o canto que era do placar. Mesmo motivo de `pointer-events:none`: sem
+   ele a tabela engole o arraste do mouse e a orbita da camera morre aqui.
+
+   Ao contrario do placar, esta tabela tem FUNDO. O placar era um numero
+   gigante que se lia por cima de qualquer coisa; texto miudo sobre uma cena
+   3D que se mexe, nao -- o chao do galpao passa por tras e a linha some.
+   O fundo e' quase solido de proposito: a cena que ele cobre e' piso vazio,
+   nao o robo. */
+.motores{
+  position:absolute;left:34px;top:26px;
+  pointer-events:none;user-select:none;
+  border-collapse:collapse;
+  background:color-mix(in srgb,var(--panel-2) 88%,transparent);
+  backdrop-filter:blur(6px);
+  border:1px solid var(--line);border-radius:5px;
+  box-shadow:0 8px 30px rgba(0,0,0,.55);
+  overflow:hidden;
+}
+.motores th,.motores td{padding:9px 16px;text-align:left;vertical-align:baseline}
+/* A borda vai em CADA linha do corpo, e nao em `tr + tr`: com o cabecalho
+   dentro de um <thead>, as linhas deixam de ser irmas da do titulo e o
+   seletor de irmao adjacente pularia justamente a separacao do cabecalho. */
+.motores tbody tr{border-top:1px solid var(--line)}
+
+/* O NOME da esteira em corpo pequeno: quem olha ja sabe que sao duas e qual
+   e' qual pela ordem -- o que muda, e portanto o que merece corpo, e o
+   estado e os numeros. */
+.motores tbody th{
+  font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--muted);
+  white-space:nowrap;
+}
+
+/* O CABECALHO e' legenda, nao dado: menor e mais apagado que tudo abaixo
+   dele. Quem le' de longe ve os numeros; quem chega perto descobre o que
+   sao. Se ele competir em peso com o valor, inverte essa ordem. */
+.motores thead th{
+  padding-top:11px;padding-bottom:5px;
+  font-size:10px;font-weight:600;letter-spacing:.16em;
+  color:var(--muted);opacity:.62;white-space:nowrap;
+}
+/* Alinhados com a coluna que descrevem -- os numeros sao a direita. */
+.motores thead th:nth-child(3),
+.motores thead th:nth-child(4){text-align:right}
+.motores-estado{
+  font-family:var(--font-data);font-size:17px;font-weight:600;
+  letter-spacing:.08em;color:var(--muted);white-space:nowrap;
+}
+.motores-estado.ok{color:var(--good)}
+.motores-estado.atencao{color:var(--warn)}
+.motores-estado.ruim{color:#E5484D}
+
+.motores-num{
+  font-family:var(--font-data);font-size:22px;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--ink);
+  white-space:nowrap;text-align:right;
+}
+/* A unidade em miudo e' o que deixa o numero ser o numero: "1450 rpm" com
+   tudo do mesmo tamanho obriga a ler a palavra antes do valor. */
+.motores-num u{
+  text-decoration:none;font-size:11px;font-weight:600;letter-spacing:.1em;
+  color:var(--muted);margin-left:5px;
+}
+/* Ambar = o real nao bate com o comandado. O numero comandado nao aparece
+   (era ruido de leitura); a cor e' o que restou dele. */
+.motores-num.atencao{color:var(--warn)}
+
+/* SEM DADO ocupa a linha toda, sem colunas vazias fingindo medida. */
+.motores-sem-dado td{
+  font-family:var(--font-data);font-size:13px;letter-spacing:.12em;
+  color:var(--warn);
 }
 
 .stage{padding:6px;position:relative;display:flex;flex-direction:column;

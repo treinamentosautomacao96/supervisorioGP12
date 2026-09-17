@@ -114,6 +114,14 @@ export interface RobotState {
 
     // ---- se está parado, o que impede? ----
     automatico: boolean;    // modo da CÉLULA (diferente do remoto do robô)
+    /** POR LADO, como o CLP manda. O `&&` dos dois vivia aqui e escondia
+     *  metade da resposta: numa célula espelhada, "uma porta aberta" e "as
+     *  duas abertas" levam a ações diferentes — na primeira o outro lado
+     *  continua produzindo. */
+    porta1: boolean; porta2: boolean;
+    barreira1: boolean; barreira2: boolean;
+    /** Os dois consolidados, porque há quem só precise do resumo: o aviso
+     *  falado usa `portas` para saber que alguém entrou na célula. */
     portas: boolean;        // as duas chaves de segurança fechadas
     barreiras: boolean;     // as duas barreiras livres
     descargaCheia: boolean; // palete cheio esperando empilhadeira
@@ -132,6 +140,22 @@ export interface RobotState {
   fonte: "sim" | "real";
   /** Em modo real: o broker está entregando dados frescos? */
   realOk: boolean;
+  /** Estado da LIGAÇÃO com o broker, separado do frescor do dado.
+   *
+   *  `realOk` responde "posso confiar no que está na tela?" e diz não por
+   *  três motivos diferentes: nunca chegou quadro, o último envelheceu, ou o
+   *  CLP parou de bater o heartbeat. Para quem vai CONSERTAR, os três levam a
+   *  lugares diferentes — cabo de rede, broker, CLP. Estes campos separam.
+   *
+   *  Só tem sentido com `fonte === "real"`; no simulador vem tudo zerado. */
+  mqtt: {
+    /** O cliente MQTT está com sessão aberta neste instante. */
+    conectado: boolean;
+    /** Há quantos ms chegou o último quadro válido. `null` = nenhum ainda. */
+    ultimoQuadroMs: number | null;
+    /** HR26 andando: o CLP está vivo do outro lado do gateway. */
+    plcOk: boolean;
+  };
   tcp: Vec3;
   speed: number;
   /** Caixas já paletizadas (mundo, mm) — o cliente as desenha. */

@@ -607,12 +607,18 @@ export class Gp12Simulator extends EventEmitter {
       // No simulador os dois paletes estao sempre presentes, menos na troca.
       status: {
         remoto: true, servoOn: true, emCiclo: this.running, emHome: false,
-        falha: false, almRobo: 0, automatico: true, portas: true,
-        barreiras: true, descargaCheia: this.trocando,
+        falha: false, almRobo: 0, automatico: true,
+        porta1: true, porta2: true, barreira1: true, barreira2: true,
+        portas: true, barreiras: true, descargaCheia: this.trocando,
         vacuoLigado: this.carrying, vacuoOk: this.carrying, pressaoBar: 6.2,
         ladoAtivo: this.placed.length < PER_PALLET ? 1 : 2,
         almBalanca: 0, seladoraDesabilitada: false,
-      },      emergencia: false,      // o simulador nao gera emergencia
+      },
+      // O simulador nao tem broker nenhum. Zerado, e nao inventado como
+      // "conectado": o card de conexao so' aparece com a fonte em REAL, e se
+      // um dia aparecer aqui deve dizer a verdade -- nao ha' MQTT.
+      mqtt: { conectado: false, ultimoQuadroMs: null, plcOk: false },
+      emergencia: false,      // o simulador nao gera emergencia
       paletesProduzidos: 0,
       // O simulador não tem balança de verdade, então não inventa reprovação:
       // conta como OK o que ele mesmo depositou e deixa NÃO OK em zero. O

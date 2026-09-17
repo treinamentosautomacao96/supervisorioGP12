@@ -67,6 +67,10 @@ export class MqttSource extends EventEmitter {
   };
   private tcpPrev: { x: number; y: number; z: number } | null = null;
   private tcpSpeed = 0;
+  /** Sessão aberta com o broker AGORA. Nasce falso e só o evento `connect`
+   *  liga: enquanto o mqtt.js tenta reconectar de 3 em 3 s, "conectando" é
+   *  desconectado para quem olha a tela. */
+  private brokerConectado = false;
 
   constructor(
     url = process.env.MQTT_URL ?? "mqtt://localhost:1883",
@@ -95,8 +99,15 @@ export class MqttSource extends EventEmitter {
     });
     client.on("connect", () => {
       console.log(`[fonte-real] broker OK: ${url} (tópico ${topico})`);
+      this.brokerConectado = true;
       client.subscribe(topico);
     });
+    // `close` e `offline` cobrem os dois jeitos de cair: a conexão morrer e o
+    // mqtt.js desistir dela. `error` NÃO derruba o sinal sozinho — erro de
+    // subscribe chega por aí com a sessão de pé, e apagar a luz por isso faria
+    // a tela mentir sobre um broker que está respondendo.
+    client.on("close", () => { this.brokerConectado = false; });
+    client.on("offline", () => { this.brokerConectado = false; });
     client.on("error", (e) => console.error(`[fonte-real] broker: ${e.message}`));
     client.on("message", (_t, raw) => {
       // Mensagem de rede: parse defensivo, campos validados no uso.
@@ -501,15 +512,19 @@ export class MqttSource extends EventEmitter {
       return {
         j: [0, -5, -50], phase: 0, phaseName: "SEM DADOS", carrying: false,
         feed: null, peso: 0, running: false, ritmo: 0, turbo: 1,
-        fonte: "real", realOk: false, tcp: fkTcp([0, -5, -50]), speed: 0,
+        fonte: "real", realOk: false,
+        mqtt: { conectado: this.brokerConectado, ultimoQuadroMs: null, plcOk: false },
+        tcp: fkTcp([0, -5, -50]), speed: 0,
         placed: [], boxIndex: 0, boxTotal: TOTAL, descartadas: 0, carryRot: 0,
         paleteA: false, paleteB: false, saidaA: 1, saidaB: 1,
         emergencia: false, paletesProduzidos: 0, producao: null,
         inversores: { entrada: null, balanca: null },
         status: {
           remoto: false, servoOn: false, emCiclo: false, emHome: false,
-          falha: false, almRobo: 0, automatico: false, portas: false,
-          barreiras: false, descargaCheia: false, vacuoLigado: false,
+          falha: false, almRobo: 0, automatico: false,
+          porta1: false, porta2: false, barreira1: false, barreira2: false,
+          portas: false, barreiras: false,
+          descargaCheia: false, vacuoLigado: false,
           vacuoOk: false, pressaoBar: 0, ladoAtivo: 0, almBalanca: 0,
           seladoraDesabilitada: false,
         },
@@ -584,6 +599,10 @@ export class MqttSource extends EventEmitter {
         falha: p.robo.falha,
         almRobo: p.almRobo,
         automatico: p.celula.automatico,
+        porta1: p.celula.porta1,
+        porta2: p.celula.porta2,
+        barreira1: p.celula.barreira1,
+        barreira2: p.celula.barreira2,
         portas: p.celula.porta1 && p.celula.porta2,
         barreiras: p.celula.barreira1 && p.celula.barreira2,
         descargaCheia: p.robo.descargaCheia,
@@ -596,6 +615,11 @@ export class MqttSource extends EventEmitter {
       },
       fonte: "real",
       realOk: ok,
+      mqtt: {
+        conectado: this.brokerConectado,
+        ultimoQuadroMs: this.last === null ? null : Date.now() - this.lastRx,
+        plcOk: this.last?.plcOk ?? false,
+      },
       tcp: fkTcp(j),
       speed: ok ? this.tcpSpeed : 0,
       placed: this.pilha(countA, countB),
