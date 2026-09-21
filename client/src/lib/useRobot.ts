@@ -44,13 +44,28 @@ export function useRobot(): RobotLink {
     let alive = true;
     let retry: ReturnType<typeof setTimeout>;
 
+    // Espera ate a proxima tentativa. Cresce a cada falha ate 30 s.
+    //
+    // Era 1 s FIXO, e com a TV atras de um alternador de abas isso significava
+    // uma conexao nova por segundo enquanto a rede estivesse ruim - cada uma
+    // virando mais um socket para o servidor alimentar a 25 fps.
+    let espera = 1000;
+
     function connect() {
+      if (!alive || document.hidden) return;
+
+      // Ja ha um enlace de pe ou a caminho: abrir outro so duplica.
+      const atual = wsRef.current;
+      if (atual && (atual.readyState === WebSocket.OPEN
+                 || atual.readyState === WebSocket.CONNECTING)) return;
+
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${proto}://${location.host}/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {
         setConnected(true);
+        espera = 1000;                 // conexao boa zera a penalidade
         // Conexão nova ganha crédito: o primeiro quadro pode demorar, e
         // contar o tempo de espera como "sem dado" acusaria falha em quem
         // acabou de chegar.
@@ -104,13 +119,47 @@ export function useRobot(): RobotLink {
         setConnected(false);
         // Perder o enlace NÃO congela a tela em silêncio: o estado fica, o
         // selo SEM COMUNICAÇÃO acende, e a reconexão insiste sozinha.
-        if (alive) retry = setTimeout(connect, 1000);
+        //
+        // Com a aba oculta NAO se reconecta: quem fechou o enlace foi o
+        // visibilitychange abaixo, de proposito.
+        if (alive && !document.hidden) {
+          retry = setTimeout(connect, espera);
+          espera = Math.min(espera * 2, 30_000);
+        }
       };
     }
+
+    // ---------------------------------------------------------------------
+    //  ABA OCULTA SOLTA O ENLACE
+    //
+    //  O navegador CONGELA aba em segundo plano: o socket continua aberto e o
+    //  JavaScript para de drenar. O servidor, sem saber, segue mandando 25
+    //  quadros por segundo para um buffer que ninguem esvazia - foi o que
+    //  estourou a memoria da instancia a cada ~10 min.
+    //
+    //  Esta tela vive num PC com alternador de abas, transmitindo para a TV da
+    //  celula. Ou seja: oculta a maior parte do tempo. Soltar o enlace nessa
+    //  hora nao perde nada - aba oculta nao desenha - e devolve ao servidor a
+    //  certeza de que nao ha ninguem para alimentar.
+    // ---------------------------------------------------------------------
+    function aoTrocarVisibilidade() {
+      if (document.hidden) {
+        clearTimeout(retry);
+        wsRef.current?.close();
+        return;
+      }
+      // Voltou a aparecer: reconecta JA, sem herdar a penalidade de antes.
+      espera = 1000;
+      clearTimeout(retry);
+      connect();
+    }
+
+    document.addEventListener("visibilitychange", aoTrocarVisibilidade);
     connect();
 
     return () => {
       alive = false;
+      document.removeEventListener("visibilitychange", aoTrocarVisibilidade);
       clearTimeout(retry);
       wsRef.current?.close();
     };

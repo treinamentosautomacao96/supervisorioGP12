@@ -48,6 +48,16 @@ const sessao = cookieSession({
 });
 app.use(sessao);
 
+// Saude do processo. ANTES da trava de login de proposito: um health check que
+// precisa de sessao nao mede o servidor, mede o Google.
+app.get("/healthz", (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    clientes: wss?.clients.size ?? 0,
+    memoriaMB: Math.round(process.memoryUsage().rss / 1048576),
+  });
+});
+
 if (authAtivo) {
   app.get("/auth/login", (_req, res) => {
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -241,6 +251,20 @@ function broadcast(state: RobotState, de: "sim" | "real") {
   for (const c of wss.clients) {
     if (c.readyState !== WebSocket.OPEN || fonteDo(c) !== de) continue;
 
+    // CONTRAPRESSAO. Sem isto o servidor morre por memoria, e foi o que
+    // derrubava a instancia a cada ~10 min (Render: "exceeded its memory
+    // limit", 21/09/2026).
+    //
+    // Aba em segundo plano e CONGELADA pelo navegador: o socket segue aberto,
+    // readyState continua OPEN, e o JavaScript para de drenar. Como o
+    // alternador de abas da TV deixa esta tela oculta a maior parte do tempo,
+    // esse era o estado normal, nao a excecao. Cada send() ia para o buffer de
+    // saida, 25 vezes por segundo, sem teto.
+    //
+    // Quadro de supervisorio nao vale a pena empilhar: quando o cliente voltar
+    // a ler, o que importa e o AGORA, nao os mil quadros que ele perdeu.
+    if (c.bufferedAmount > BUFFER_MAX) continue;
+
     if (precisaCompleto.has(c)) {
       // Serializado no máximo uma vez por quadro, e só se houver quem precise.
       inteiro ??= JSON.stringify({ type: "state", ...completo } as StateMsg);
@@ -271,6 +295,10 @@ function broadcast(state: RobotState, de: "sim" | "real") {
 //
 //  Sem isso, a recarga automática da tela teria de disparar em cima do
 //  silêncio — e silêncio, aqui, é o estado normal de uma célula parada.
+/** Teto do buffer de saida por cliente. Acima disto o cliente nao esta
+ *  lendo, e mandar mais e so consumir memoria do servidor. */
+const BUFFER_MAX = 256 * 1024;
+
 const PULSO_MS = 5000;
 /** Além de quanto tempo sem quadro a fonte é dada por morta. Três vezes o
  *  período do pulso: um quadro perdido não condena ninguém. */
@@ -287,6 +315,30 @@ setInterval(() => {
     } satisfies PulsoMsg));
   }
 }, PULSO_MS);
+
+// ------------------------------------------------------------ vida do enlace
+//  O `pulso` acima prova ao NAVEGADOR que o servidor esta vivo. Nao prova o
+//  contrario, e era isso que faltava: socket meio aberto - TV que dormiu, rede
+//  que caiu, NAT que expirou - fica em readyState OPEN para sempre, porque
+//  nada o desmente.
+//
+//  Ping/pong de WebSocket resolve, mas a biblioteca `ws` NAO o envia sozinha:
+//  e preciso chamar ws.ping(). Quem nao responder em uma volta e derrubado.
+const VIDA_MS = 30_000;
+const vivos = new WeakSet<WebSocket>();
+
+wss.on("connection", (ws) => {
+  vivos.add(ws);
+  ws.on("pong", () => vivos.add(ws));
+});
+
+setInterval(() => {
+  for (const c of wss.clients) {
+    if (!vivos.has(c)) { c.terminate(); continue; }   // nao respondeu a volta passada
+    vivos.delete(c);
+    c.ping();
+  }
+}, VIDA_MS);
 
 // 50 Hz de simulação -> 25 Hz de rede; a fonte real já emite a 25 Hz.
 let skip = false;
