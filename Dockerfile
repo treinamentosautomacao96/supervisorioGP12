@@ -21,6 +21,23 @@ COPY . .
 RUN npm run build
 
 ENV NODE_ENV=production
+
+# TETO DE HEAP ABAIXO DO LIMITE DO CONTAINER.
+#
+# Sem isto o V8 dimensiona o old space pela memoria que enxerga da MAQUINA, que
+# no Render e muito maior que a cota da instancia. Ele entao nunca sente pressao
+# e nunca dispara o mark-sweep completo: o scavenge roda (o dente de serra do
+# grafico), promove sobreviventes para o old space, e o old space so cresce ate
+# o CONTAINER matar o processo - antes de o V8 pensar em recolher.
+#
+# Era o padrao observado em 22/09/2026: dois picos que recolhiam, e um terceiro
+# que subia sem parar ate ~476 MB de um limite de 512.
+#
+# 384 deixa ~128 MB para o que nao e heap: buffers de socket, codigo nativo e o
+# proprio tsx. Ajustar junto com o tamanho da instancia - o numero so faz
+# sentido em relacao a ela.
+ENV NODE_OPTIONS=--max-old-space-size=384
+
 EXPOSE 3001
 
 CMD ["npx", "tsx", "server/index.ts"]

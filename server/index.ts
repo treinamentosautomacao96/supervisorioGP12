@@ -13,6 +13,7 @@ import "dotenv/config";
 import express from "express";
 import cookieSession from "cookie-session";
 import { createServer } from "node:http";
+import v8 from "node:v8";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
@@ -51,10 +52,32 @@ app.use(sessao);
 // Saude do processo. ANTES da trava de login de proposito: um health check que
 // precisa de sessao nao mede o servidor, mede o Google.
 app.get("/healthz", (_req, res) => {
+  const m = process.memoryUsage();
+  const mb = (n: number) => Math.round(n / 1048576);
+
+  // A REPARTICAO IMPORTA MAIS QUE O TOTAL.
+  //
+  // Quando a memoria sobe, o total nao diz onde ela esta - e "onde" e o que
+  // escolhe o conserto:
+  //
+  //   heapUsed sobe   -> objetos JavaScript retidos, ou GC que nao roda
+  //   external/arrayBuffers sobe -> Buffer: socket ou MQTT
+  //   bufferKB sobe   -> cliente que nao drena, e a contrapressao nao segurou
+  //
+  // Sem esta linha a investigacao vira leitura de codigo e palpite, que foi
+  // como se perderam duas tentativas em 21-22/09/2026.
   res.status(200).json({
     ok: true,
-    clientes: wss?.clients.size ?? 0,
-    memoriaMB: Math.round(process.memoryUsage().rss / 1048576),
+    clientes: wss.clients.size,
+    rssMB: mb(m.rss),
+    heapUsedMB: mb(m.heapUsed),
+    heapTotalMB: mb(m.heapTotal),
+    externalMB: mb(m.external),
+    arrayBuffersMB: mb(m.arrayBuffers),
+    bufferKB: Math.round(
+      [...wss.clients].reduce((s, c) => s + c.bufferedAmount, 0) / 1024),
+    limiteHeapMB: mb(v8.getHeapStatistics().heap_size_limit),
+    uptimeS: Math.round(process.uptime()),
   });
 });
 
