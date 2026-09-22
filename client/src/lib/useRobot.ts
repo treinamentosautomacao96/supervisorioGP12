@@ -149,6 +149,12 @@ export function useRobot(): RobotLink {
         return;
       }
       // Voltou a aparecer: reconecta JA, sem herdar a penalidade de antes.
+      //
+      // O credito de tempo tambem se renova. O enlace leva alguns instantes
+      // para subir e o primeiro quadro para chegar; sem zerar aqui, o
+      // watchdog de recarga acordaria com o relogio de ANTES da aba sumir e
+      // recarregaria a pagina no instante em que ela voltou a ser vista.
+      ultimoDadoRef.current = Date.now();
       espera = 1000;
       clearTimeout(retry);
       connect();

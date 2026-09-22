@@ -67,6 +67,19 @@ export function useAutoReload(ultimoDadoRef: {
 
   useEffect(() => {
     const t = setInterval(() => {
+      // ---- ABA OCULTA NAO CONTA -------------------------------------------
+      //
+      // Desde 21/09/2026 o useRobot SOLTA o enlace quando a aba some, para nao
+      // deixar o servidor alimentando uma aba congelada. O silencio que vem
+      // disso e intencional - nao e falha.
+      //
+      // Sem esta guarda o watchdog o interpretava como CLP mudo e recarregava
+      // a pagina em segundo plano, sem ninguem olhando. Numa TV atras de um
+      // alternador de abas isso acontece a cada rotacao: recarga, bundle de
+      // 1 MB outra vez, cena three.js refeita, conexao nova. Foi defeito
+      // introduzido pela correcao do enlace, nao problema do CLP.
+      if (document.hidden) { setFaltam(null); return; }
+
       const parado = (Date.now() - ultimoDadoRef.current) / 1000;
 
       // ---- VOLTOU --------------------------------------------------------
