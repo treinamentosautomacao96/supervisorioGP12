@@ -18,3 +18,7 @@ client/PLC_1/
 
 # temporários
 *.log
+
+# Bundle do servidor, gerado por `npm run build`. Como o client/dist, e
+# artefato: versiona-lo convida a subir um build velho sem ninguem notar.
+dist-server/

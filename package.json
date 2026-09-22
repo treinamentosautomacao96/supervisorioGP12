@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n servidor,web -c blue,green \"tsx watch server/index.ts\" \"vite\"",
-    "build": "vite build",
-    "start": "tsx server/index.ts",
+    "build": "vite build && npm run pacote-servidor",
+    "pacote-servidor": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist-server/index.js",
+    "start": "node --max-old-space-size=300 dist-server/index.js",
     "gateway": "tsx gateway/index.ts",
     "pacote-gateway": "esbuild gateway/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/index.cjs --external:serialport --external:@serialport/* && esbuild gateway/testa-modbus.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-gateway/testa-modbus.cjs --external:serialport --external:@serialport/*",
     "clp-falso": "tsx gateway/clp-falso.ts",

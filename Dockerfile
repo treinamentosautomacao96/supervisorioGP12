@@ -22,6 +22,16 @@ RUN npm run build
 
 ENV NODE_ENV=production
 
+# O TETO VAI NA LINHA DE COMANDO, NAO EM NODE_OPTIONS.
+#
+# Variavel de ambiente e sobrescrivel pelo painel do host e some por completo
+# se o servico nao estiver usando este Dockerfile - e um servico configurado
+# como "Node" no Render ignora o Dockerfile inteiro, rodando `npm start`. Por
+# isso o mesmo limite esta no script `start` do package.json: os dois caminhos
+# de execucao levam ao mesmo lugar.
+#
+# Ver o comentario abaixo para a razao do numero.
+
 # TETO DE HEAP ABAIXO DO LIMITE DO CONTAINER.
 #
 # Sem isto o V8 dimensiona o old space pela memoria que enxerga da MAQUINA, que
@@ -33,11 +43,19 @@ ENV NODE_ENV=production
 # Era o padrao observado em 22/09/2026: dois picos que recolhiam, e um terceiro
 # que subia sem parar ate ~476 MB de um limite de 512.
 #
-# 384 deixa ~128 MB para o que nao e heap: buffers de socket, codigo nativo e o
-# proprio tsx. Ajustar junto com o tamanho da instancia - o numero so faz
-# sentido em relacao a ela.
-ENV NODE_OPTIONS=--max-old-space-size=384
+# 300 num limite de 512 deixa ~200 MB para o que nao e heap.
+#
+# Comecou em 384 e nao bastou: com o heap no teto o RSS chegou a 476 MB, ou
+# seja, 36 MB de margem. Em 22/09/2026 dois picos da MESMA altura tiveram
+# desfechos opostos - num a coleta chegou primeiro, no outro o container
+# chegou primeiro. Margem de 36 MB e cara ou coroa.
+#
+# O numero so faz sentido em relacao ao tamanho da instancia: mexer num,
+# conferir o outro.
 
 EXPOSE 3001
 
-CMD ["npx", "tsx", "server/index.ts"]
+# SEM tsx EM PRODUCAO. O bundle e gerado no build (npm run pacote-servidor),
+# entao o compilador TypeScript nao precisa ficar residente na memoria de uma
+# instancia de 512 MB - e a partida deixa de transpilar a cada boot.
+CMD ["node", "--max-old-space-size=300", "dist-server/index.js"]

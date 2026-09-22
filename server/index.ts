@@ -409,6 +409,23 @@ wss.on("connection", (ws) => {
 
 http.listen(PORT, () => {
   console.log(`[supervisorio] WS/HTTP em http://localhost:${PORT}`);
+
+  // O LIMITE REAL, NO LOG DE PARTIDA.
+  //
+  // Nao adianta declarar o teto no Dockerfile e supor que chegou: se o servico
+  // nao usa Docker, ou se o host sobrescreve NODE_OPTIONS, ele nao chega - e o
+  // sintoma e identico ao de nao ter feito nada. Esta linha e a diferenca entre
+  // saber e achar, e aparece em toda reinicializacao sem precisar de /healthz.
+  // CUIDADO AO LER heap_size_limit: ele NAO e o --max-old-space-size.
+  // Ele soma a geracao jovem e o espaco de codigo ao old space. Medido em
+  // 22/09/2026: com --max-old-space-size=300 ele reporta 492 MB. Um limiar
+  // de aviso ingenuo em 400 acusaria falso positivo em toda partida.
+  //
+  // Sem a flag, numa maquina com bastante RAM, ele passa de 2000. E essa
+  // ordem de grandeza - nao a dezena - que distingue "chegou" de "nao chegou".
+  const heapMB = Math.round(v8.getHeapStatistics().heap_size_limit / 1048576);
+  console.log(`[supervisorio] teto de heap: ${heapMB} MB` +
+    (heapMB > 1000 ? "  <-- O LIMITE NAO CHEGOU AO PROCESSO" : "  (limite aplicado)"));
   if (!fs.existsSync(dist)) {
     console.log("[supervisorio] dev: abra o Vite em http://localhost:5173");
   }
