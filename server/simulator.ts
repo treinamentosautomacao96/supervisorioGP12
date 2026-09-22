@@ -76,6 +76,22 @@ export const DESCARTE = { s: 40, r: 1120, top: 650 } as const;
 // qualquer lugar — na nuvem ele roda em UTC.
 const FUSO_FABRICA = "America/Sao_Paulo";
 
+/** Formatador da hora da fábrica, criado UMA vez.
+ *
+ *  Era criado dentro de `indicadores()`, a cada tick — 50 vezes por segundo.
+ *  Um `Intl.DateTimeFormat` carrega um formatador ICU: memória NATIVA, fora do
+ *  heap do V8. O invólucro JavaScript é minúsculo, então o coletor não sente
+ *  pressão e quase não roda; enquanto isso a parte nativa cresce sem que
+ *  nenhum contador do processo a mostre (heapUsed parado, external parado,
+ *  RSS subindo ~1,2 MB/s).
+ *
+ *  Foi o que derrubava a instância do Render a cada ~10 min em 21-22/09/2026,
+ *  com heap de 25 MB num RSS de 476. Três correções de heap e de socket não
+ *  mudaram nada — não havia o que recolher no heap. */
+const FORMATO_HORA_FABRICA = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: FUSO_FABRICA, hour: "2-digit", minute: "2-digit", hour12: false,
+});
+
 const PER_LAYER = 16;
 export const PER_PALLET = PER_LAYER * PALLET.layers;              // 32
 export const TOTAL = PER_PALLET * 2;                              // 64
@@ -670,10 +686,9 @@ export class Gp12Simulator extends EventEmitter {
     //
     // Só o SIMULADOR precisa disto: na fonte real o turno vem do CLP, que
     // usa o relógio da CPU, já na hora local.
-    const t = new Date();
-    const hhmm = new Intl.DateTimeFormat("pt-BR", {
-      timeZone: FUSO_FABRICA, hour: "2-digit", minute: "2-digit", hour12: false,
-    }).format(t);
+    // Formatador de módulo, nunca `new Intl.DateTimeFormat` aqui: ver
+    // FORMATO_HORA_FABRICA. Esta linha roda 50 vezes por segundo.
+    const hhmm = FORMATO_HORA_FABRICA.format(new Date());
     const [hora, minuto] = hhmm.split(":").map(Number);
     const min = hora * 60 + minuto;
     const turno = min >= 450 && min < 1050 ? 1 : (min >= 1050 || min < 170) ? 2 : 0;
